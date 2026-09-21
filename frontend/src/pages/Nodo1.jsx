@@ -1,5 +1,8 @@
-export default function Titulo() {
+export default function Nodo1() {
   return (
-    <h1>Bienvenido a AgroIA</h1>
+    <div style={{ padding: "40px", fontFamily: "sans-serif", textAlign: "center" }}>
+      <h2>Monitor - Nodo 1</h2>
+      <p>Módulo de AgroIA en construcción...</p>
+    </div>
   );
 }
