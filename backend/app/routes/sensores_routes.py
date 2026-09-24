@@ -20,13 +20,19 @@ def _cliente_influx():
 @sensores_bp.route("/datos", methods=["POST"])
 @requiere_api_key
 def recibir_datos():
-    """El ESP32 sube sus lecturas aquí (equivalente a subir_a_blynk() del firmware viejo)."""
+    """El ESP32 sube sus lecturas aquí (equivalente a subir_a_blynk() del firmware viejo).
+
+    El tag `nodo_id` usa el identificador del hardware (ej. "1", "2", "3", "4"),
+    NO el id interno de MySQL — así el dato en InfluxDB queda desacoplado de
+    detalles de la base relacional (si algún día se reconstruye la tabla,
+    los identificadores de hardware no cambian).
+    """
     data = request.get_json() or {}
     client, write_api = _cliente_influx()
 
     punto = (
-        Point("lectura_nodo")
-        .tag("nodo_id", str(request.nodo.id))
+        Point("sensores_suelo")
+        .tag("nodo_id", request.nodo.identificador)
         .field("temp_suelo", float(data.get("temp_suelo", 0)))
         .field("humedad_suelo", float(data.get("humedad_suelo", 0)))
         .field("bateria_pct", float(data.get("bateria_pct", 0)))
@@ -36,17 +42,21 @@ def recibir_datos():
     return jsonify({"status": "ok"}), 200
 
 
-@sensores_bp.route("/actual/<int:nodo_id>", methods=["GET"])
+@sensores_bp.route("/actual/<string:identificador_nodo>", methods=["GET"])
 @jwt_required()
-def sensores_actual(nodo_id):
-    """Última lectura de un nodo, para el dashboard en tiempo real."""
+def sensores_actual(identificador_nodo):
+    """Última lectura de un nodo, para el dashboard en tiempo real.
+
+    Se consulta por el identificador de hardware ("1", "2", "3", "4"),
+    el mismo valor que se usa como tag en InfluxDB.
+    """
     client, _ = _cliente_influx()
     query_api = client.query_api()
 
     flux = f'''
     from(bucket: "{current_app.config["INFLUXDB_BUCKET"]}")
       |> range(start: -1h)
-      |> filter(fn: (r) => r._measurement == "lectura_nodo" and r.nodo_id == "{nodo_id}")
+      |> filter(fn: (r) => r._measurement == "sensores_suelo" and r.nodo_id == "{identificador_nodo}")
       |> last()
     '''
     tables = query_api.query(flux)
