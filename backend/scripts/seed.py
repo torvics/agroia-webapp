@@ -2,8 +2,12 @@
 - 1 usuario Admin
 - 1 usuario Agricultor (el cliente final, dueño de la parcela del piloto)
 - 1 parcela (5 hectáreas contiguas, como en la simulación original de Taiwan)
-- 4 nodos dentro de esa parcela, identificados "1", "2", "3", "4" —
-  coinciden con el tag `nodo_id` que se usa en InfluxDB (bucket "piloto").
+- 1 nodo "Estación" (tipo=estacion) — el único con WiFi/internet, el único
+  con api_key real que autentica contra el backend.
+- 4 nodos de suelo (tipo=sensor_suelo, identificadores "1"-"4") — solo hablan
+  LoRa con la Estación, nunca llaman al backend por sí mismos. Existen en
+  MySQL para ownership, bitácora y comandos, con api_key generada pero
+  sin uso real (requiere_api_key solo acepta tipo=estacion).
 
 Uso (con Docker):
     docker compose exec backend python scripts/seed.py
@@ -21,7 +25,7 @@ from app.models import Usuario, Parcela, Nodo
 
 app = create_app()
 
-NODOS = ["1", "2", "3", "4"]
+NODOS_SUELO = ["1", "2", "3", "4"]
 
 
 def obtener_o_crear_usuario(nombre, correo, password, rol):
@@ -49,15 +53,16 @@ def obtener_o_crear_parcela(nombre, usuario_id):
     return p
 
 
-def obtener_o_crear_nodo(parcela_id, identificador):
+def obtener_o_crear_nodo(parcela_id, identificador, tipo):
     n = Nodo.query.filter_by(identificador=identificador).first()
     if n:
-        print(f"  Nodo {identificador} ya existe (api_key ya asignada antes)")
+        print(f"  Nodo '{identificador}' ({tipo}) ya existe")
         return n
-    n = Nodo(parcela_id=parcela_id, identificador=identificador)
+    n = Nodo(parcela_id=parcela_id, identificador=identificador, tipo=tipo)
     db.session.add(n)
     db.session.commit()
-    print(f"  Nodo {identificador} creado  ->  api_key: {n.api_key}")
+    etiqueta = "  <-- USAR ESTA api_key EN EL FIRMWARE DEL PADRE" if tipo == "estacion" else ""
+    print(f"  Nodo '{identificador}' ({tipo}) creado  ->  api_key: {n.api_key}{etiqueta}")
     return n
 
 
@@ -71,9 +76,12 @@ with app.app_context():
     print("\nSembrando parcela (dueño: Agricultor Piloto)...")
     parcela = obtener_o_crear_parcela("Parcela 1", agricultor.id)
 
-    print("\nSembrando nodos de la Parcela 1...")
-    for identificador in NODOS:
-        obtener_o_crear_nodo(parcela.id, identificador)
+    print("\nSembrando nodo Estación (padre, único con internet)...")
+    obtener_o_crear_nodo(parcela.id, "estacion", "estacion")
 
-    print("\nListo. Copia las api_key de arriba si vas a correr el simulador contra estos nodos.")
-    print("Bucket de InfluxDB a usar: piloto")
+    print("\nSembrando nodos de suelo (hijos, solo LoRa)...")
+    for identificador in NODOS_SUELO:
+        obtener_o_crear_nodo(parcela.id, identificador, "sensor_suelo")
+
+    print("\nListo. Bucket de InfluxDB a usar: piloto")
+    print("Solo la api_key de 'estacion' se usa para autenticar contra el backend.")
