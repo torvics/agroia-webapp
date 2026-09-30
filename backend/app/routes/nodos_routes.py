@@ -30,6 +30,6 @@ def registrar_nodo():
 def listar_nodos():
     nodos = Nodo.query.all()
     return jsonify([
-        {"id": n.id, "identificador": n.identificador, "estado": n.estado}
+        {"id": n.id, "identificador": n.identificador, "tipo": n.tipo, "estado": n.estado}
         for n in nodos
     ]), 200
