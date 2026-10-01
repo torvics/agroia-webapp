@@ -1,0 +1,38 @@
+/* --- LÓGICA DE ABRIR Y CERRAR --- */
+.sidebar {
+  width: 250px;
+  min-width: 250px;
+  height: 100%; /* Soluciona el corte del fondo azul, evita el 100vh */
+  background: #e4eaf0;
+  padding: 20px 14px;
+  border-right: 1px solid #cfd9e2;
+  transition: all 0.3s ease;
+}
+
+/* Cuando esta clase se activa, el menú se esconde limpiamente */
+.sidebar.cerrado {
+  margin-left: -300px; /* Margen mayor para esconder los bordes */
+  opacity: 0;
+  visibility: hidden; /* Oculta por completo la franja */
+}
+
+/* El botón para volver a abrir el menú */
+.btn-abrir-menu {
+  position: absolute;
+  top: 15px; 
+  left: 15px;
+  background: #ffffff;
+  border: 1px solid #cfd9e2;
+  border-radius: 8px;
+  padding: 8px 12px;
+  cursor: pointer;
+  font-size: 18px;
+  color: #2c3e4d;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.06);
+  z-index: 100;
+  transition: background 0.2s;
+}
+
+.btn-abrir-menu:hover {
+  background: #d3dee7;
+}
