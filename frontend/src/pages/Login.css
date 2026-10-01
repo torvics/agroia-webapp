@@ -1,0 +1,245 @@
+/* --- ESTILOS PRINCIPALES DEL LOGIN --- */
+.login-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
+  background-color: #EFEFEF;
+  font-family: sans-serif;
+}
+
+.login-card {
+  display: flex;
+  width: 800px;
+  height: 500px;
+  background-color: #FFFFFF;
+  border-radius: 8px;
+  box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+  overflow: hidden;
+}
+
+.left-panel {
+  flex: 1;
+  background-color: #7A9D54;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 20px;
+}
+
+.logo-container {
+  text-align: center;
+  color: #FFFFFF;
+}
+
+.logo-image {
+   width: 260px; 
+  height: auto;
+  margin-bottom: 15px;
+  object-fit: contain;
+  /* NUEVO: transiciones suaves y cursor de mano */
+  transition: transform 0.3s ease-in-out; 
+  cursor: zoom-in;
+}
+
+.brand-title {
+  font-size: 36px;
+  font-weight: bold;
+  margin: 0 0 5px 0;
+  letter-spacing: 1px;
+}
+
+.brand-subtitle {
+  font-size: 14px;
+  margin: 0;
+  letter-spacing: 2px;
+  border-top: 1px solid rgba(255,255,255,0.6);
+  padding-top: 5px;
+}
+
+.right-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  padding: 40px;
+}
+
+.login-title {
+  font-size: 24px;
+  font-weight: bold;
+  color: #333333;
+  margin-bottom: 30px;
+  letter-spacing: 1px;
+}
+
+.login-form {
+  width: 100%;
+  max-width: 280px;
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.login-input {
+  width: 100%;
+  padding: 12px 15px;
+  border-radius: 20px;
+  border: 1px solid #CCCCCC;
+  background-color: #F9F9F9;
+  outline: none;
+  font-size: 14px;
+  box-sizing: border-box;
+}
+
+.login-button {
+  width: 100%;
+  padding: 12px;
+  border-radius: 20px;
+  border: none;
+  background-color: #7A9D54;
+  color: #FFFFFF;
+  font-weight: bold;
+  font-size: 14px;
+  cursor: pointer;
+  margin-top: 5px;
+  box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+}
+
+.login-button:hover {
+  background-color: #6a8c48;
+}
+
+.error-text {
+  color: #E74C3C;
+  font-size: 12px;
+  text-align: center;
+  margin: 0;
+}
+
+.recover-container {
+  margin-top: 20px;
+  font-size: 12px;
+  color: #666666;
+}
+
+.recover-link {
+  color: #7A9D54;
+  text-decoration: none;
+  font-weight: bold;
+  cursor: pointer;
+}
+
+.recover-link:hover {
+  text-decoration: underline;
+}
+
+/* --- ESTILOS DEL MODAL DE RECUPERAR CONTRASEÑA --- */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background-color: rgba(0, 0, 0, 0.6);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+}
+
+.modal-content {
+  background-color: #fcf9fc;
+  width: 320px;
+  padding: 40px 25px;
+  border-radius: 4px;
+  border: 1px solid #ccc;
+  text-align: center;
+  box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.modal-logo {
+  width: 200px;
+  margin-bottom: 20px;
+}
+
+.modal-title {
+  font-size: 18px;
+  font-weight: 800;
+  color: #111;
+  margin: 0 0 10px 0;
+}
+
+.modal-text {
+  font-size: 13px;
+  color: #777;
+  line-height: 1.4;
+  margin-bottom: 25px;
+}
+
+.modal-input-group {
+  text-align: left;
+  width: 100%;
+  margin-bottom: 20px;
+}
+
+.modal-label {
+  display: block;
+  font-size: 13px;
+  color: #222;
+  margin-bottom: 6px;
+}
+
+.modal-input-recover {
+  width: 100%;
+  padding: 10px 15px;
+  border-radius: 20px;
+  border: 1px solid #333;
+  background-color: #8c8f91;
+  color: #fff;
+  font-size: 13px;
+  box-sizing: border-box;
+  box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+}
+
+.modal-input-recover::placeholder {
+  color: #dfdfdf;
+}
+
+.modal-input-recover:focus {
+  outline: none;
+  border-color: #000;
+}
+
+.modal-btn-enviar {
+  width: 100%;
+  padding: 12px;
+  border-radius: 20px;
+  border: 1px solid #333;
+  background-color: #789954;
+  color: #fff;
+  font-size: 14px;
+  cursor: pointer;
+  margin-bottom: 15px;
+  box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+  transition: transform 0.1s;
+}
+
+.modal-btn-enviar:active {
+  transform: scale(0.98);
+}
+
+.modal-back-link {
+  font-size: 12px;
+  color: #4b807a;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.modal-back-link:hover {
+  text-decoration: underline;
+}
