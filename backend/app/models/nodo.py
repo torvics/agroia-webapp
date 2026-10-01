@@ -16,3 +16,7 @@ class Nodo(db.Model):
         db.Enum("activo", "inactivo", "mantenimiento", name="estado_enum"),
         default="activo"
     )
+    parcela = db.relationship(
+    "Parcela",
+    backref=db.backref("nodos", lazy=True)
+    )
