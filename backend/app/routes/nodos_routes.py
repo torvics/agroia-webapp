@@ -19,10 +19,18 @@ def registrar_nodo():
 
     parcela_id = data.get("parcela_id")
     identificador = data.get("identificador")
+    tipo = data.get("tipo", "sensor_suelo")
 
     if not parcela_id or not identificador:
         return jsonify({
             "error": "parcela_id e identificador son obligatorios"
+        }), 400
+
+    tipos_validos = ["estacion", "sensor_suelo"]
+
+    if tipo not in tipos_validos:
+        return jsonify({
+            "error": "Tipo de nodo inválido"
         }), 400
 
     parcela = db.session.get(Parcela, parcela_id)
@@ -32,14 +40,20 @@ def registrar_nodo():
             "error": "Parcela no encontrada"
         }), 404
 
-    nodo_existente = Nodo.query.filter_by( identificador=identificador).first()
+    nodo_existente = Nodo.query.filter_by(
+        identificador=identificador
+    ).first()
 
     if nodo_existente:
         return jsonify({
             "error": "Ya existe un nodo con ese identificador"
         }), 409
 
-    nodo = Nodo( parcela_id=parcela_id, identificador=identificador )
+    nodo = Nodo(
+        parcela_id=parcela_id,
+        identificador=identificador,
+        tipo=tipo
+    )
 
     db.session.add(nodo)
     db.session.commit()
@@ -48,6 +62,7 @@ def registrar_nodo():
         "id": nodo.id,
         "parcela_id": nodo.parcela_id,
         "identificador": nodo.identificador,
+        "tipo": nodo.tipo,
         "estado": nodo.estado,
         "api_key": nodo.api_key
     }), 201
@@ -77,6 +92,7 @@ def listar_nodos():
             "id": n.id,
             "parcela_id": n.parcela_id,
             "identificador": n.identificador,
+            "tipo": n.tipo,
             "estado": n.estado
         }
         for n in nodos
@@ -99,7 +115,10 @@ def editar_nodo(nodo_id):
     if "identificador" in data:
         nuevo_identificador = data["identificador"]
 
-        existente = Nodo.query.filter( Nodo.identificador == nuevo_identificador, Nodo.id != nodo.id).first()
+        existente = Nodo.query.filter(
+            Nodo.identificador == nuevo_identificador,
+            Nodo.id != nodo.id
+        ).first()
 
         if existente:
             return jsonify({
@@ -110,7 +129,10 @@ def editar_nodo(nodo_id):
 
     if "parcela_id" in data:
 
-        parcela = db.session.get( Parcela, data["parcela_id"] )
+        parcela = db.session.get(
+            Parcela,
+            data["parcela_id"]
+        )
 
         if not parcela:
             return jsonify({
@@ -118,6 +140,20 @@ def editar_nodo(nodo_id):
             }), 404
 
         nodo.parcela_id = data["parcela_id"]
+
+    if "tipo" in data:
+
+        tipos_validos = [
+            "estacion",
+            "sensor_suelo"
+        ]
+
+        if data["tipo"] not in tipos_validos:
+            return jsonify({
+                "error": "Tipo de nodo inválido"
+            }), 400
+
+        nodo.tipo = data["tipo"]
 
     if "estado" in data:
 
@@ -137,9 +173,10 @@ def editar_nodo(nodo_id):
     db.session.commit()
 
     return jsonify({
-"id": nodo.id,
+        "id": nodo.id,
         "parcela_id": nodo.parcela_id,
         "identificador": nodo.identificador,
+        "tipo": nodo.tipo,
         "estado": nodo.estado
     }), 200
 
@@ -176,6 +213,7 @@ def validar_api_key():
         "valida": True,
         "nodo_id": nodo.id,
         "identificador": nodo.identificador,
+        "tipo": nodo.tipo,
         "parcela_id": nodo.parcela_id,
         "estado": nodo.estado
     }), 200
