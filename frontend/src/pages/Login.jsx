@@ -1,109 +1,89 @@
 import { useState } from "react";
-import api from "../services/api";
-import "./Login.css";
-
-import agroiaLogo from "../assets/agroia-logo.png";
+import logoImg from "../assets/agroia-logo.png";
+import "./Login.css"; 
+// Importamos el nuevo componente que acabas de crear
+import RecuperarContra from "../components/recuperarcontra"; 
 
 export default function Login({ onLogin }) {
   const [correo, setCorreo] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
+  
+  // Estado para decirle al componente RecuperarContra si debe abrirse
+  const [modalAbierto, setModalAbierto] = useState(false);
 
-  const handleSubmit = async (e) => {
+  const handleSubmit = (e) => {
     e.preventDefault();
-
     setError("");
-    setLoading(true);
 
-    try {
-      const { data } = await api.post("/auth/login", {
-        correo,
-        password,
-      });
-
-      localStorage.setItem("token", data.access_token);
-
-      onLogin(data);
-    } catch (err) {
-      setError("Credenciales inválidas");
-    } finally {
-      setLoading(false);
+    // Validación: TIENES que escribir "jose" y "1234" para que entre
+    if (correo.trim() === "jose" && password === "1234") {
+      const fakeData = { access_token: "mock-token-jose" };
+      localStorage.setItem("token", fakeData.access_token);
+      
+      // Al ejecutar onLogin, tu App.jsx detecta el usuario y hace la redirección
+      onLogin(fakeData); 
+      return;
+    } else {
+      setError("Credenciales inválidas (Usa: jose y 1234)");
     }
   };
 
   return (
-    <div className="login-page">
-      {/* =====================================
-          PANEL IZQUIERDO
-      ====================================== */}
-      <section className="login-left">
-        <img
-          src={agroiaLogo}
-          alt="AgroIA - Riego Inteligente"
-          className="login-logo"
-        />
-      </section>
+    <div className="login-container">
+      <div className="login-card">
+        {/* Panel Izquierdo */}
+        <div className="left-panel">
+          <div className="logo-container">
+            <img src={logoImg} alt="AgroIA Logo" className="logo-image" />
+            
+          </div>
+        </div>
 
-      {/* =====================================
-          PANEL DERECHO
-      ====================================== */}
-      <section className="login-right">
-        <div className="login-container">
-          <h1 className="login-title">LOG IN</h1>
-
+        {/* Panel Derecho */}
+        <div className="right-panel">
+          <h2 className="login-title">LOG IN</h2>
+          
           <form onSubmit={handleSubmit} className="login-form">
-            {/* Usuario */}
             <input
               type="text"
-              placeholder="tu.usuario"
+              placeholder="tu usuario"
               value={correo}
               onChange={(e) => setCorreo(e.target.value)}
-              autoComplete="username"
               className="login-input"
-              required
             />
-
-            {/* Contraseña */}
             <input
               type="password"
-              placeholder="********"
+              placeholder="****"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              autoComplete="current-password"
               className="login-input"
-              required
             />
-
-            {/* Botón */}
-            <button
-              type="submit"
-              className="login-button"
-              disabled={loading}
-            >
-              {loading ? "INGRESANDO..." : "INICIAR SESION"}
+            
+            <button type="submit" className="login-button">
+              INICIAR SESIÓN
             </button>
 
-            {/* Recuperar contraseña */}
-            <div className="forgot-password">
-              <span>¿Olvido su contraseña?</span>
-
-              <button
-                type="button"
-                className="recover-button"
-                onClick={() => {
-                  console.log("Recuperar contraseña");
-                }}
-              >
-                Recupérala
-              </button>
-            </div>
-
-            {/* Error */}
-            {error && <p className="login-error">{error}</p>}
+            {error && <p className="error-text">{error}</p>}
           </form>
+
+          <div className="recover-container">
+            <span className="recover-text">¿Olvidó su contraseña? </span>
+            <span 
+              className="recover-link" 
+              onClick={() => setModalAbierto(true)}
+            >
+              Recupérala
+            </span>
+          </div>
         </div>
-      </section>
+      </div>
+
+      {/* Aquí mandamos a llamar a la mini ventana y le pasamos los controles */}
+      <RecuperarContra 
+        isOpen={modalAbierto} 
+        onClose={() => setModalAbierto(false)} 
+      />
     </div>
   );
 }

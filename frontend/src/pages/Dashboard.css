@@ -1,0 +1,131 @@
+/* Contenedor principal que une el Sidebar y el contenido */
+.dashboard-container {
+  display: flex;
+  height: 100vh;
+  width: 100vw;
+  background-color: #F8FAF8; /* Un blanco/verdoso muy sutil y fresco, cero gris oscuro */
+  overflow: hidden;
+  font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+}
+
+/* Área de contenido a la derecha del Sidebar */
+.dashboard-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+}
+
+/* --- Cabecera Superior --- */
+.dashboard-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background-color: #FFFFFF;
+  padding: 25px 40px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.03); /* Sombra súper suave */
+  border-bottom: 1px solid #EBEFEB;
+}
+
+.greeting {
+  margin: 0;
+  font-size: 24px;
+  color: #1F3D2B; /* Verde oscuro elegante de tu marca */
+  font-weight: 800;
+}
+
+.subtitle {
+  margin: 5px 0 0 0;
+  color: #777;
+  font-size: 14px;
+}
+
+.btn-logout {
+  background-color: #ffeaea;
+  color: #d32f2f;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-weight: bold;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-logout:hover {
+  background-color: #ffcdd2;
+}
+
+/* --- Contenido Principal (Tarjetas) --- */
+.dashboard-content {
+  padding: 40px;
+}
+
+.cards-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 25px;
+  margin-bottom: 30px;
+}
+
+.stat-card {
+  background-color: #FFFFFF;
+  padding: 20px;
+  border-radius: 16px;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.04); /* Sombra moderna de tarjeta */
+  border-left: 5px solid #7A9D54; /* Un toque del verde de tu logo */
+  transition: transform 0.2s ease;
+}
+
+.stat-card:hover {
+  transform: translateY(-5px); /* Efecto de flotar al pasar el mouse */
+}
+
+.card-icon {
+  font-size: 32px;
+  background-color: #F0F6F0;
+  width: 60px;
+  height: 60px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+}
+
+.card-info h3 {
+  margin: 0;
+  font-size: 13px;
+  color: #888;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.stat-value {
+  margin: 5px 0 0 0;
+  font-size: 26px;
+  font-weight: bold;
+  color: #222;
+}
+
+/* --- Panel principal de abajo --- */
+.main-panel {
+  background-color: #FFFFFF;
+  border-radius: 16px;
+  padding: 30px;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.04);
+}
+
+.main-panel h2 {
+  margin-top: 0;
+  color: #1F3D2B;
+  font-size: 18px;
+  border-bottom: 1px solid #eee;
+  padding-bottom: 15px;
+}
+
+.panel-content {
+  color: #555;
+  line-height: 1.6;
+}
