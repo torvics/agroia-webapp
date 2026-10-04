@@ -1,7 +1,5 @@
 import { useState } from "react";
-import { useNavigate, Link } from "react-router-dom";
-import siderbar from "../components/sidebar";
-// import api from "../services/api";
+import { useNavigate, Link, useLocation } from "react-router-dom";
 
 const DATOS_NODO_1 = {
   id: 1,
@@ -25,41 +23,19 @@ function Gauge({ label, value, max = 100, unit = "%", color = "#3fb6b6" }) {
     <div style={styles.gaugeCard}>
       <div style={styles.gaugeLabel}>{label}</div>
       <div style={styles.gaugeWrap}>
-        <div
-          style={{
-            ...styles.gaugeRing,
-            background: `conic-gradient(${color} ${pct}%, #f0f0f0 ${pct}% 100%)`,
-          }}
-        />
-        <div style={styles.gaugeInner}>
-          {value}
-          <span style={{ fontSize: 14 }}>{unit}</span>
-        </div>
+        <div style={{ ...styles.gaugeRing, background: `conic-gradient(${color} ${pct}%, #f0f0f0 ${pct}% 100%)` }} />
+        <div style={styles.gaugeInner}>{value}<span style={{ fontSize: 14 }}>{unit}</span></div>
       </div>
-      <div style={styles.gaugeScale}>
-        <span>0</span>
-        <span>{max}</span>
-      </div>
+      <div style={styles.gaugeScale}><span>0</span><span>{max}</span></div>
     </div>
   );
 }
 
 function LineChart({ data }) {
-  const width = 400;
-  const height = 140;
-  const padding = 20;
-  const labels = ["A", "B", "C", "D"]; 
-
+  const width = 400, height = 140, padding = 20, labels = ["A", "B", "C", "D"]; 
   const max = Math.max(...data, 100);
   const stepX = (width - padding * 2) / (data.length - 1);
-  
-  const points = data
-    .map((v, i) => {
-      const x = padding + i * stepX;
-      const y = height - padding - (v / max) * (height - padding * 2);
-      return `${x},${y}`;
-    })
-    .join(" ");
+  const points = data.map((v, i) => `${padding + i * stepX},${height - padding - (v / max) * (height - padding * 2)}`).join(" ");
 
   return (
     <svg viewBox={`0 0 ${width} ${height + 20}`} width="100%" height="100%">
@@ -72,13 +48,8 @@ function LineChart({ data }) {
           </g>
         );
       })}
-      
       <polyline points={points} fill="none" stroke="#2f7bd6" strokeWidth="3" />
-      
-      {labels.map((label, i) => {
-        const x = padding + i * stepX;
-        return <text key={label} x={x} y={height + 10} fontSize="12" fill="#666" textAnchor="middle">{label}</text>;
-      })}
+      {labels.map((label, i) => <text key={label} x={padding + i * stepX} y={height + 10} fontSize="12" fill="#666" textAnchor="middle">{label}</text>)}
     </svg>
   );
 }
@@ -87,19 +58,8 @@ function NodoToggle({ nombre, encendido, onChange }) {
   return (
     <div style={styles.nodoToggleGrande}>
       <span style={{ fontWeight: "bold" }}>{nombre}</span>
-      <div
-        onClick={onChange}
-        style={{
-          ...styles.switch,
-          background: encendido ? "#2f7bd6" : "#ccc",
-        }}
-      >
-        <div
-          style={{
-            ...styles.switchKnob,
-            left: encendido ? 26 : 2,
-          }}
-        />
+      <div onClick={onChange} style={{ ...styles.switch, background: encendido ? "#2f7bd6" : "#ccc" }}>
+        <div style={{ ...styles.switchKnob, left: encendido ? 26 : 2 }} />
       </div>
     </div>
   );
@@ -108,20 +68,12 @@ function NodoToggle({ nombre, encendido, onChange }) {
 export default function Nodo1() {
   const [nodo, setNodo] = useState(DATOS_NODO_1);
   const [sidebarAbierta, setSidebarAbierta] = useState(false);
+  
   const navigate = useNavigate();
+  const location = useLocation();
 
-  const menuOpciones = [
-    { nombre: "Vista general", ruta: "/dashboard" },
-    { nombre: "Nodo 1", ruta: "/nodo1" },
-    { nombre: "Nodo 2", ruta: "/nodo2" },
-    { nombre: "Nodo 3", ruta: "/nodo3" },
-    { nombre: "Nodo 4", ruta: "/nodo4" }
-  ];
-
-  const toggleEncendido = () => {
-    setNodo((prev) => ({ ...prev, encendido: !prev.encendido }));
-  };
-
+  const toggleEncendido = () => setNodo((prev) => ({ ...prev, encendido: !prev.encendido }));
+  
   const handleLogout = () => {
     localStorage.removeItem("token");
     window.location.href = "/login";
@@ -130,40 +82,38 @@ export default function Nodo1() {
   return (
     <div style={styles.app}>
       
+      {/* SIDEBAR DESPLEGABLE CON NUEVO DISEÑO */}
       <aside style={{
         ...styles.sidebar,
-        width: sidebarAbierta ? 220 : 0,
-        padding: sidebarAbierta ? "24px 20px" : "24px 0",
-        borderRight: sidebarAbierta ? "2px solid #333" : "none",
+        width: sidebarAbierta ? 250 : 0,
+        padding: sidebarAbierta ? "0" : "0",
+        borderRight: sidebarAbierta ? "1px solid #e0e0e0" : "none",
         opacity: sidebarAbierta ? 1 : 0,
       }}>
-        <div style={{ visibility: sidebarAbierta ? "visible" : "hidden" }}>
+        <div style={{ visibility: sidebarAbierta ? "visible" : "hidden", display: "flex", flexDirection: "column", height: "100%" }}>
           <div style={styles.sidebarHeader}>
-            <span style={{ fontSize: 24, cursor: "pointer", color: "#333" }} onClick={() => setSidebarAbierta(false)}>←</span>
-            <span>MENU</span>
+            <span style={{ fontSize: 24, cursor: "pointer", color: "#333", marginRight: 15 }} onClick={() => setSidebarAbierta(false)}>←</span>
+            <h2 style={{ margin: 0, fontSize: 20 }}>Menú</h2>
           </div>
-          <ul style={styles.sidebarList}>
-            {menuOpciones.map((opcion) => (
-              <Link 
-                key={opcion.nombre}
-                to={opcion.ruta}
-                style={{ textDecoration: "none" }}
-              >
-                <li 
-                  style={{
-                    ...styles.sidebarItem,
-                    color: opcion.nombre === "Nodo 1" ? "#6f9a63" : "#000"
-                  }}
-                >
-                  {opcion.nombre}
-                </li>
-              </Link>
-            ))}
-          </ul>
-        </div>
-        <div style={{ ...styles.sidebarFooter, visibility: sidebarAbierta ? "visible" : "hidden" }} onClick={() => navigate("/config-general")}>
-          <span style={{ fontSize: 22 }}>⚙️</span>
-          <span>Configuracion</span>
+          
+          <div style={styles.sidebarSection}>
+            <div style={styles.sidebarSectionTitle}>PRINCIPAL</div>
+            <Link to="/dashboard" style={location.pathname === "/dashboard" ? styles.sidebarLinkActive : styles.sidebarLink}>Vista general</Link>
+          </div>
+
+          <div style={styles.sidebarSection}>
+            <div style={styles.sidebarSectionTitle}>NODOS</div>
+            <Link to="/nodo1" style={location.pathname === "/nodo1" ? styles.sidebarLinkActive : styles.sidebarLink}>Nodo 1</Link>
+            <Link to="/nodo2" style={location.pathname === "/nodo2" ? styles.sidebarLinkActive : styles.sidebarLink}>Nodo 2</Link>
+            <Link to="/nodo3" style={location.pathname === "/nodo3" ? styles.sidebarLinkActive : styles.sidebarLink}>Nodo 3</Link>
+            <Link to="/nodo4" style={location.pathname === "/nodo4" ? styles.sidebarLinkActive : styles.sidebarLink}>Nodo 4</Link>
+          </div>
+          
+          <div style={styles.sidebarFooter}>
+            <Link to="/config-general" style={styles.sidebarLinkConfig}>
+              <span>⚙️</span> Configuración
+            </Link>
+          </div>
         </div>
       </aside>
 
@@ -179,7 +129,12 @@ export default function Nodo1() {
           <div style={styles.bannerRight}>
             <div style={styles.tempBadge}>{DATOS_GENERALES.clima.temperatura} °C</div>
             <div style={styles.iconCircle}>🔔</div>
-            <div style={styles.iconCircle}>👤</div>
+            <div 
+              style={{ ...styles.iconCircle, cursor: "pointer" }}
+              onClick={() => navigate("/config-cuenta")}
+            >
+              👤
+            </div>
           </div>
         </header>
 
@@ -257,12 +212,16 @@ export default function Nodo1() {
 const styles = {
   app: { display: "flex", maxWidth: 1150, minHeight: 800, margin: "20px auto", background: "#fdfdfd", borderRadius: 8, overflow: "hidden", boxShadow: "0 2px 10px rgba(0,0,0,0.15)", fontFamily: "sans-serif" },
   
-  sidebar: { backgroundColor: "#d9d9d9", display: "flex", flexDirection: "column", justifyContent: "space-between", boxSizing: "border-box", transition: "all 0.3s ease", overflow: "hidden", whiteSpace: "nowrap", zIndex: 10 },
-  sidebarHeader: { display: "flex", alignItems: "center", gap: 12, fontSize: 20, fontWeight: "bold", marginBottom: 25 },
-  sidebarList: { listStyleType: "none", paddingLeft: 0, margin: 0, display: "flex", flexDirection: "column", gap: 15 },
-  sidebarItem: { fontSize: 16, fontWeight: "bold", cursor: "pointer", paddingLeft: 20 },
-  sidebarFooter: { display: "flex", alignItems: "center", gap: 10, fontSize: 16, fontWeight: "bold", cursor: "pointer", marginTop: "auto", paddingLeft: 10 },
-  
+  // Sidebar Estilos unificados
+  sidebar: { backgroundColor: "#f4f6f8", display: "flex", flexDirection: "column", boxSizing: "border-box", transition: "all 0.3s ease", overflow: "hidden", whiteSpace: "nowrap", zIndex: 10 },
+  sidebarHeader: { display: "flex", alignItems: "center", padding: "20px 20px", borderBottom: "1px solid #e0e0e0", marginBottom: "20px", color: "#333" },
+  sidebarSection: { marginBottom: "25px", display: "flex", flexDirection: "column" },
+  sidebarSectionTitle: { padding: "0 20px", fontSize: "12px", fontWeight: "bold", color: "#888", letterSpacing: "1px", marginBottom: "10px" },
+  sidebarLink: { display: "block", padding: "12px 20px", color: "#444", textDecoration: "none", fontSize: "15px", fontWeight: "600", transition: "background 0.2s, color 0.2s" },
+  sidebarLinkActive: { display: "block", padding: "12px 20px", textDecoration: "none", fontSize: "15px", fontWeight: "600", backgroundColor: "#e6f4cd", color: "#5a7d3c", borderLeft: "4px solid #7A9D54" },
+  sidebarFooter: { marginTop: "auto", padding: "20px 0", borderTop: "1px solid #e0e0e0" },
+  sidebarLinkConfig: { display: "flex", alignItems: "center", gap: "10px", padding: "12px 20px", color: "#444", textDecoration: "none", fontSize: "15px", fontWeight: "600" },
+
   mainContent: { flex: 1, display: "flex", flexDirection: "column", overflowY: "auto" },
   banner: { background: "#7A9D54", color: "#fff", display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 24px" },
   brand: { display: "flex", alignItems: "center", gap: 10 },
@@ -276,18 +235,14 @@ const styles = {
   mapIconBorder: { border: "2px solid #ccc", borderRadius: 12, padding: "4px 8px" },
   dots: { display: "flex", gap: 6, marginTop: 4 },
   dot: { width: 10, height: 10, borderRadius: "50%", display: "inline-block" },
-  
   selectGroupContainer: { border: "1px solid #ccc", borderRadius: 8, padding: "4px 8px", display: "flex", flexDirection: "column", background: "#fff" },
   select: { border: "none", outline: "none", background: "transparent", fontSize: 12 },
-  
   nodoToggleGrande: { border: "1px solid #ccc", borderRadius: 12, padding: "6px 12px", display: "flex", flexDirection: "column", alignItems: "center", fontSize: 14, gap: 6, background: "#fff", boxShadow: "0 2px 4px rgba(0,0,0,0.05)" },
   switch: { width: 50, height: 26, borderRadius: 20, position: "relative", cursor: "pointer", transition: "background 0.2s" },
   switchKnob: { content: "", position: "absolute", top: 2, width: 22, height: 22, borderRadius: "50%", background: "#fff", transition: "left 0.2s" },
   logoutBtn: { padding: "6px 12px", cursor: "pointer", border: "1px solid #ccc", borderRadius: 6, background: "#f9f9f9" },
-  
   main: { padding: "20px 24px 24px", background: "#fdfdfd", flex: 1 },
   sectionTitle: { margin: "0 0 20px", fontSize: 26, fontWeight: "bold" },
-  
   gaugeGridNodo: { display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 20, marginBottom: 30 },
   gaugeCard: { border: "2px solid #eaeaea", borderRadius: 16, padding: "20px 10px", textAlign: "center", background: "#fff", boxShadow: "0 2px 8px rgba(0,0,0,0.02)" },
   gaugeLabel: { fontSize: 14, color: "#333", marginBottom: 15 },
@@ -295,10 +250,8 @@ const styles = {
   gaugeRing: { width: "100%", height: "100%", borderRadius: "50%" },
   gaugeInner: { position: "absolute", top: 12, left: 12, right: 12, bottom: 12, background: "#fff", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: 24, color: "#444" },
   gaugeScale: { display: "flex", justifyContent: "space-between", fontSize: 12, color: "#999", padding: "10px 15px 0" },
-  
   bottomSectionNodo: { display: "flex", gap: 20 },
   chartCard: { flex: 2, border: "2px solid #eaeaea", borderRadius: 12, padding: 20, background: "#fff" },
-  
   statsColNodo: { flex: 1, display: "flex", flexDirection: "column", gap: 15, justifyContent: "space-between" },
   statBoxLigero: { background: "#f3f5ef", borderRadius: 20, padding: "15px 10px", textAlign: "center" },
   statLabel: { fontSize: 12, color: "#8b9c7b", fontWeight: "bold", marginBottom: 4 },
