@@ -3,6 +3,7 @@ from flask_jwt_extended import jwt_required, get_jwt_identity, get_jwt
 from influxdb_client import InfluxDBClient, Point
 from influxdb_client.client.write_api import SYNCHRONOUS
 from datetime import datetime, timedelta, timezone
+from ..services.alertas_service import (evaluar_alerta_nodo, evaluar_alerta_estacion)
 
 from ..extensions import db
 from ..models import Nodo, Parcela
@@ -196,6 +197,7 @@ def recibir_datos_estacion():
             "error": "Los valores de los sensores deben ser numéricos"
         }), 400
 
+        # 1. Guardar primero la lectura ambiental en InfluxDB
     client, write_api = _cliente_influx()
 
     try:
@@ -206,11 +208,34 @@ def recibir_datos_estacion():
     finally:
         client.close()
 
+    # 2. Evaluar si la temperatura ambiental es crítica
+    resultado_alerta = "sin_nueva_alerta"
+
+    try:
+        alerta = evaluar_alerta_estacion(
+            request.nodo,
+            float(data["temp_ambiente"])
+        )
+
+        if alerta is not None:
+            resultado_alerta = "registrada"
+
+    except Exception:
+        db.session.rollback()
+        resultado_alerta = "error"
+
+        current_app.logger.exception(
+            "Error al evaluar alerta de estación %s",
+            request.nodo.id
+        )
+
+    # 3. Confirmar la recepción de datos
     return jsonify({
         "status": "ok",
         "mensaje": "Datos de estación almacenados",
         "estacion_id": request.nodo.id,
-        "parcela_id": request.nodo.parcela_id
+        "parcela_id": request.nodo.parcela_id,
+        "alerta_procesamiento": resultado_alerta
     }), 201
 
 @nodos_datos_bp.route("/<int:nodo_id>/datos", methods=["POST"])
@@ -306,6 +331,7 @@ def recibir_datos_nodo(nodo_id):
             "error": "Los valores de los sensores deben ser numéricos"
         }), 400
 
+        # 1. Guardar primero los datos del nodo en InfluxDB
     client, write_api = _cliente_influx()
 
     try:
@@ -316,12 +342,35 @@ def recibir_datos_nodo(nodo_id):
     finally:
         client.close()
 
+    # 2. Evaluar si la humedad del suelo es crítica
+    resultado_alerta = "sin_nueva_alerta"
+
+    try:
+        alerta = evaluar_alerta_nodo(
+            nodo,
+            float(data["humedad_suelo"])
+        )
+
+        if alerta is not None:
+            resultado_alerta = "registrada"
+
+    except Exception:
+        db.session.rollback()
+        resultado_alerta = "error"
+
+        current_app.logger.exception(
+            "Error al evaluar alerta del nodo %s",
+            nodo.id
+        )
+
+    # 3. Confirmar la recepción de datos
     return jsonify({
         "status": "ok",
         "mensaje": "Datos del nodo almacenados",
         "nodo_id": nodo.id,
         "identificador": nodo.identificador,
-        "parcela_id": nodo.parcela_id
+        "parcela_id": nodo.parcela_id,
+        "alerta_procesamiento": resultado_alerta
     }), 201
 
 
