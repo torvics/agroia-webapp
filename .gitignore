@@ -12,3 +12,7 @@ dist/
 # Docker / OS
 *.log
 .DS_Store
+
+# Reportes generados por AgroIA
+/reporte_parcela_*.csv
+/reporte_parcela_*.pdf
