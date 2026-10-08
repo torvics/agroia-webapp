@@ -20,6 +20,20 @@ Plataforma web de control, monitoreo y análisis del sistema de riego inteligent
    - Backend (health check): http://localhost:5000/api/health
    - InfluxDB UI: http://localhost:8086
 
+### Preparar la base de datos y cargar datos de prueba
+
+Después de levantar los servicios, aplica las migraciones antes de usar la API o
+cargar datos iniciales. Desde la raíz del proyecto:
+
+```bash
+docker compose exec backend flask db upgrade
+docker compose exec backend python scripts/seed.py
+```
+
+El primer comando actualiza el esquema de MySQL según las migraciones del backend
+(incluida la columna `nodos.tipo`); el segundo crea los usuarios y nodos de
+prueba y se puede ejecutar más de una vez.
+
 ## Cómo correr cada parte manualmente (sin Docker)
 
 ### Backend

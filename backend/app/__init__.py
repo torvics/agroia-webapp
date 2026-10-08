@@ -8,7 +8,7 @@ from .routes.auth_routes import auth_bp
 from .routes.parcelas_routes import parcelas_bp
 from .routes.nodos_routes import nodos_bp
 from .routes.comandos_routes import comandos_bp
-from .routes.sensores_routes import ( sensores_bp, estacion_bp, nodos_datos_bp, lluvia_bp)
+from .routes.sensores_routes import sensores_bp
 from .routes.bitacora_routes import bitacora_bp
 from .routes.alertas_routes import alertas_bp
  
@@ -30,11 +30,7 @@ def create_app():
     app.register_blueprint(nodos_bp, url_prefix="/api/nodos")
     app.register_blueprint(comandos_bp, url_prefix="/api")
     app.register_blueprint(sensores_bp, url_prefix="/api/sensores")
-    app.register_blueprint(estacion_bp, url_prefix="/api/estacion")
     app.register_blueprint(bitacora_bp, url_prefix="/api/bitacora")
-    app.register_blueprint(nodos_datos_bp, url_prefix="/api/nodos")
-    # Endpoint de consulta del pluviómetro
-    app.register_blueprint(lluvia_bp, url_prefix="/api")
     app.register_blueprint(alertas_bp, url_prefix="/api/alertas")
  
     # El esquema ya NO se crea aquí automáticamente.
