@@ -275,9 +275,26 @@ def confirmar_comando(nodo_id):
             "comando_id": comando.id
         }), 200
 
+    # Marcamos el comando como ejecutado
     comando.ejecutado = True
     comando.fecha_ejecucion = datetime.datetime.utcnow()
 
+    # Registramos que la estación confirmó el comando.
+    # Asociamos el evento al usuario que solicitó la acción.
+    db.session.add(
+        Bitacora(
+            usuario_id=comando.usuario_id,
+            nodo_id=nodo.id,
+            accion=(
+                f"Estación {request.nodo.identificador} "
+                f"confirmó comando {comando.id}: "
+                f"{comando.tipo_comando} = {comando.valor} "
+                f"en Nodo {nodo.identificador}"
+            )
+        )
+    )
+
+    # Guardamos ambas operaciones en la misma transacción
     db.session.commit()
 
     return jsonify({
@@ -394,8 +411,23 @@ def confirmar_comandos_estacion():
         ):
             continue
 
+        # Marcamos el comando como ejecutado
         comando.ejecutado = True
         comando.fecha_ejecucion = datetime.datetime.utcnow()
+
+        # Registramos la confirmación en Bitácora
+        db.session.add(
+            Bitacora(
+                usuario_id=comando.usuario_id,
+                nodo_id=nodo.id,
+                accion=(
+                    f"Estación {request.nodo.identificador} "
+                    f"confirmó comando {comando.id}: "
+                    f"{comando.tipo_comando} = {comando.valor} "
+                    f"en Nodo {nodo.identificador}"
+                )
+            )
+        )
 
         confirmados.append(comando.id)
 
