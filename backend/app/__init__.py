@@ -10,6 +10,7 @@ from .routes.nodos_routes import nodos_bp
 from .routes.comandos_routes import comandos_bp
 from .routes.sensores_routes import ( sensores_bp, estacion_bp, nodos_datos_bp, lluvia_bp)
 from .routes.bitacora_routes import bitacora_bp
+from .routes.alertas_routes import alertas_bp
  
 from . import models  # noqa: F401  (registra los modelos para que Alembic los detecte)
  
@@ -34,6 +35,7 @@ def create_app():
     app.register_blueprint(nodos_datos_bp, url_prefix="/api/nodos")
     # Endpoint de consulta del pluviómetro
     app.register_blueprint(lluvia_bp, url_prefix="/api")
+    app.register_blueprint(alertas_bp, url_prefix="/api/alertas")
  
     # El esquema ya NO se crea aquí automáticamente.
     # Se controla con: flask db upgrade  (ver README para el flujo completo)
