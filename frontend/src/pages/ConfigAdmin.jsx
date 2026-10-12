@@ -1,19 +1,33 @@
 import { useNavigate } from "react-router-dom";
+import { useEffect, useState } from "react";
 
 const DATOS_GENERALES = { clima: { temperatura: 36 } };
 
-const USUARIOS = [
-  { nombre: "Laura Méndez", correo: "laura@agroia.mx", rol: "Admin", estado: "Activo" },
-  { nombre: "José Ramírez", correo: "jose@agroia.mx", rol: "Agricultor", estado: "Activo" },
-  { nombre: "Carla Núñez", correo: "carla@agroia.mx", rol: "Agricultor", estado: "Inactivo" },
-];
+
 
 export default function ConfigAdmin() {
   const navigate = useNavigate();
 
+  const [usuarios, setUsuarios] = useState([]);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    const token = localStorage.getItem("access_token"); // ← ver nota abajo
+    fetch("http://localhost:5000/api/usuarios", { headers: { Authorization: `Bearer ${token}` } })
+      .then((r) => {
+        if (r.status === 401) { navigate("/login"); throw new Error("Sesión expirada"); }
+        if (r.status === 403) throw new Error("Solo un administrador puede ver esto");
+        if (!r.ok) throw new Error(`Error ${r.status}`);
+        return r.json();
+      })
+      .then(setUsuarios)
+      .catch((e) => setError(e.message));
+  }, [navigate]);
+
+
   return (
     <div style={styles.app}>
-      
+
       {/* HEADER */}
       <header style={styles.banner}>
         <div style={styles.brand}>
@@ -32,7 +46,7 @@ export default function ConfigAdmin() {
 
       {/* CONTENIDO */}
       <main style={styles.main}>
-        
+
         {/* TARJETA 1: USUARIOS Y ROLES */}
         <div style={styles.card}>
           <div style={styles.cardHeaderFlex}>
@@ -53,12 +67,13 @@ export default function ConfigAdmin() {
               </tr>
             </thead>
             <tbody>
-              {USUARIOS.map((user, index) => (
-                <tr key={index} style={styles.tr}>
+              {error && <tr><td style={styles.td} colSpan={4}>{error}</td></tr>}
+              {usuarios.map((user) => (
+                <tr key={user.id} style={styles.tr}>
                   <td style={styles.td}>{user.nombre}</td>
                   <td style={styles.td}>{user.correo}</td>
                   <td style={styles.td}>{user.rol}</td>
-                  <td style={styles.td}>{user.estado}</td>
+                  <td style={styles.td}>{user.activo ? "Activo" : "Inactivo"}</td>
                 </tr>
               ))}
             </tbody>
@@ -69,13 +84,13 @@ export default function ConfigAdmin() {
         <div style={styles.card}>
           <h2 style={styles.cardTitle}>Reportes de ciclos</h2>
           <p style={styles.cardSubtitle}>Genera un reporte descargable del ciclo de riego seleccionado</p>
-          
+
           <div style={styles.reportesFlex}>
             <select style={styles.selectInput}>
               <option>Ciclo 12 — Parcela norte (1-15 sep)</option>
               <option>Ciclo 11 — Parcela sur (15-31 ago)</option>
             </select>
-            
+
             <button style={styles.btnDescarga}>⬇ Descargar PDF</button>
             <button style={styles.btnDescarga}>⬇ Descargar CSV</button>
           </div>
@@ -102,24 +117,24 @@ const styles = {
   bannerRight: { display: "flex", alignItems: "center", gap: 14 },
   tempBadge: { background: "rgba(0,0,0,0.3)", padding: "6px 14px", borderRadius: 20, fontWeight: 600 },
   iconCircle: { width: 38, height: 38, borderRadius: "50%", background: "rgba(0,0,0,0.3)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18 },
-  
+
   main: { padding: "30px 40px", display: "flex", flexDirection: "column", gap: "25px" },
-  
+
   card: { backgroundColor: "#fff", borderRadius: 8, padding: "25px", boxShadow: "0 2px 8px rgba(0,0,0,0.05)", border: "1px solid #eaeaea" },
   cardHeaderFlex: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "20px" },
   cardTitle: { margin: "0 0 5px 0", fontSize: 18, fontWeight: "bold", color: "#222" },
   cardSubtitle: { margin: 0, fontSize: 13, color: "#777" },
-  
+
   btnNuevo: { backgroundColor: "#4f863b", color: "#fff", border: "none", padding: "8px 16px", borderRadius: 6, fontWeight: "bold", cursor: "pointer", fontSize: 13 },
-  
+
   table: { width: "100%", borderCollapse: "collapse", marginTop: "10px" },
   th: { textAlign: "left", padding: "12px 10px", borderBottom: "1px solid #ddd", color: "#666", fontSize: 13, fontWeight: "bold" },
   tr: { borderBottom: "1px solid #eee" },
   td: { padding: "12px 10px", color: "#333", fontSize: 14 },
-  
+
   reportesFlex: { display: "flex", alignItems: "center", gap: "15px", marginTop: "20px" },
   selectInput: { padding: "10px 15px", borderRadius: 6, border: "1px solid #ccc", fontSize: 14, color: "#333", minWidth: "280px", outline: "none" },
   btnDescarga: { backgroundColor: "#fff", color: "#4f863b", border: "1px solid #4f863b", padding: "10px 16px", borderRadius: 6, fontWeight: "bold", cursor: "pointer", fontSize: 13, transition: "background 0.2s" },
-  
+
   btnVolver: { backgroundColor: "#355e2b", color: "#fff", border: "none", padding: "12px 24px", borderRadius: 6, fontWeight: "bold", cursor: "pointer", fontSize: 15 }
 };

@@ -33,7 +33,7 @@ import requests
 # CONFIGURACIÓN PADRE ESP32
 # ────────────────────────────────────────────────────────────
 # La IP del padre la imprime el ESP32 en el monitor serial al conectarse al WiFi.
-PADRE_IP       = os.getenv("PADRE_IP", "172.20.10.2")
+PADRE_IP       = os.getenv("PADRE_IP", "192.168.1.185")
 PADRE_PORT     = int(os.getenv("PADRE_PORT", "80"))
 PADRE_ENDPOINT = f"http://{PADRE_IP}:{PADRE_PORT}/datos"
 ENVIAR_A_PADRE = os.getenv("ENVIAR_A_PADRE", "1") == "1"

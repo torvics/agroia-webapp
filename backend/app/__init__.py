@@ -3,7 +3,8 @@ from flask_cors import CORS
  
 from .extensions import db, jwt, migrate
 from .config import Config
- 
+
+from .routes.usuarios_routes import usuarios_bp 
 from .routes.auth_routes import auth_bp
 from .routes.parcelas_routes import parcelas_bp
 from .routes.nodos_routes import nodos_bp
@@ -24,7 +25,8 @@ def create_app():
     db.init_app(app)
     jwt.init_app(app)
     migrate.init_app(app, db)
- 
+
+    app.register_blueprint(usuarios_bp, url_prefix="/api")
     app.register_blueprint(auth_bp, url_prefix="/api/auth")
     app.register_blueprint(parcelas_bp, url_prefix="/api/parcelas")
     app.register_blueprint(nodos_bp, url_prefix="/api/nodos")
