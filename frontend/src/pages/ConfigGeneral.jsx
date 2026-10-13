@@ -1,10 +1,12 @@
 import { useState } from "react";
 import { useNavigate, Link, useLocation } from "react-router-dom";
+import logoAgroIA from "../assets/agroia-logo.png"; 
 
 const DATOS_GENERALES = { clima: { temperatura: 36 } };
 
 export default function ConfigGeneral() {
   const [sidebarAbierta, setSidebarAbierta] = useState(false);
+  const [menuAbierto, setMenuAbierto] = useState(false); // NUEVO: Estado para el menú de usuario
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -16,10 +18,32 @@ export default function ConfigGeneral() {
   const handleGuardar = () => alert("Configuración guardada exitosamente");
   const handleCancelar = () => navigate("/dashboard");
 
+  // NUEVO: Función para cerrar sesión
+  const handleLogout = () => {
+    localStorage.removeItem("token");
+    window.location.href = "/login";
+  };
+
   return (
     <div style={styles.app}>
       
-      <aside style={{ ...styles.sidebar, width: sidebarAbierta ? 250 : 0, padding: sidebarAbierta ? "0" : "0", borderRight: sidebarAbierta ? "1px solid #e0e0e0" : "none", opacity: sidebarAbierta ? 1 : 0 }}>
+      {/* Estilos de impresión */}
+      <style>{`
+        @media print {
+          body * { visibility: hidden; }
+          .no-imprimir { display: none !important; }
+        }
+      `}</style>
+
+      {/* SIDEBAR DESPLEGABLE */}
+      <aside className="no-imprimir" style={{ 
+        ...styles.sidebar, 
+        width: sidebarAbierta ? 250 : 0, 
+        minWidth: sidebarAbierta ? 250 : 0, 
+        padding: sidebarAbierta ? "0" : "0", 
+        borderRight: sidebarAbierta ? "1px solid #e0e0e0" : "none", 
+        opacity: sidebarAbierta ? 1 : 0 
+      }}>
         <div style={{ visibility: sidebarAbierta ? "visible" : "hidden", display: "flex", flexDirection: "column", height: "100%" }}>
           <div style={styles.sidebarHeader}>
             <span style={{ fontSize: 24, cursor: "pointer", color: "#333", marginRight: 15 }} onClick={() => setSidebarAbierta(false)}>←</span>
@@ -28,6 +52,7 @@ export default function ConfigGeneral() {
           <div style={styles.sidebarSection}>
             <div style={styles.sidebarSectionTitle}>PRINCIPAL</div>
             <Link to="/dashboard" style={location.pathname === "/dashboard" ? styles.sidebarLinkActive : styles.sidebarLink}>Vista general</Link>
+            <Link to="/Bitacoras" style={location.pathname === "/Bitacoras" ? styles.sidebarLinkActive : styles.sidebarLink}>Bitácoras</Link>
           </div>
           <div style={styles.sidebarSection}>
             <div style={styles.sidebarSectionTitle}>NODOS</div>
@@ -43,17 +68,59 @@ export default function ConfigGeneral() {
       </aside>
 
       <div style={styles.mainContent}>
-        <header style={styles.banner}>
-          <div style={styles.brand}><span style={{ fontSize: 28 }}>🌱</span><div><h1 style={styles.brandTitle}>Agro IA</h1><small style={styles.brandSubtitle}>RIEGO INTELIGENTE</small></div></div>
+        <header className="no-imprimir" style={styles.banner}>
+          <Link to="/dashboard" style={{ textDecoration: "none", display: "flex", alignItems: "center" }}>
+            <img 
+              src={logoAgroIA} 
+              alt="Agro IA - Riego Inteligente" 
+              style={{ height: 60, cursor: "pointer" }} 
+             />
+          </Link>
           <div style={styles.bannerRight}>
             <div style={styles.tempBadge}>{DATOS_GENERALES.clima.temperatura} °C</div>
             <div style={styles.iconCircle}>🔔</div>
-            <div style={{ ...styles.iconCircle, cursor: "pointer" }} onClick={() => navigate("/config-cuenta")}>👤</div>
+            
+            {/* ICONO DE USUARIO CON MENÚ DESPLEGABLE */}
+            <div 
+              style={{ ...styles.iconCircle, cursor: "pointer" }}
+              onClick={() => setMenuAbierto(!menuAbierto)}
+            >
+              👤
+            </div>
+
+            {/* MENÚ DESPLEGABLE DE USUARIO */}
+            {menuAbierto && (
+              <div style={styles.userMenu}>
+                <div style={styles.userMenuHeader}>
+                  <div style={styles.userMenuAvatar}>👤</div>
+                  <div style={styles.userMenuInfo}>
+                    <div style={styles.userMenuName}>JOSE BUZANI</div>
+                    <div style={styles.userMenuEmail}>Josebuzani06@gmail.com</div>
+                  </div>
+                </div>
+
+                <div style={styles.userMenuOptions}>
+                  <div style={styles.userMenuOption} onClick={() => { navigate("/config-admin"); setMenuAbierto(false); }}>
+                    <span style={styles.userMenuBullet}>•</span> Gestión de usuarios
+                  </div>
+                  <div style={styles.userMenuOption} onClick={() => { setMenuAbierto(false); }}>
+                    <span style={styles.userMenuBullet}>•</span> Cambiar cuenta
+                  </div>
+                  <div style={styles.userMenuOption} onClick={() => { navigate("/config-cuenta"); setMenuAbierto(false); }}>
+                    <span style={styles.userMenuBullet}>•</span> Gestión de cuenta
+                  </div>
+                </div>
+
+                <div style={styles.userMenuLogout} onClick={handleLogout}>
+                  <span style={{ marginRight: 8 }}>🚪</span> Cerrar sesión
+                </div>
+              </div>
+            )}
           </div>
         </header>
 
         <div style={{ display: "flex", flex: 1 }}>
-          <div style={styles.leftGreyBar}>
+          <div className="no-imprimir" style={styles.leftGreyBar}>
             {!sidebarAbierta && (<span style={{ fontSize: 28, cursor: "pointer", color: "#333" }} onClick={() => setSidebarAbierta(true)}>☰</span>)}
           </div>
           <main style={styles.main}>
@@ -109,8 +176,27 @@ export default function ConfigGeneral() {
 }
 
 const styles = {
-  app: { display: "flex", maxWidth: 1150, minHeight: 800, margin: "20px auto", background: "#fcfafc", borderRadius: 8, overflow: "hidden", boxShadow: "0 2px 10px rgba(0,0,0,0.15)", fontFamily: "sans-serif" },
-  sidebar: { backgroundColor: "#f4f6f8", display: "flex", flexDirection: "column", boxSizing: "border-box", transition: "all 0.3s ease", overflow: "hidden", whiteSpace: "nowrap", zIndex: 10 },
+  // CAMBIO: Ocupa toda la pantalla, sin márgenes ni bordes redondeados
+  app: { 
+    display: "flex", 
+    maxWidth: "100%", 
+    minHeight: "100vh", 
+    margin: 0, 
+    background: "#fcfafc", 
+    fontFamily: "sans-serif" 
+  },
+  
+  // CAMBIO: Transición suave para width y min-width
+  sidebar: { 
+    backgroundColor: "#f4f6f8", 
+    display: "flex", 
+    flexDirection: "column", 
+    boxSizing: "border-box", 
+    transition: "width 0.3s ease, min-width 0.3s ease, opacity 0.3s ease", 
+    overflow: "hidden", 
+    whiteSpace: "nowrap", 
+    zIndex: 10 
+  },
   sidebarHeader: { display: "flex", alignItems: "center", padding: "20px 20px", borderBottom: "1px solid #e0e0e0", marginBottom: "20px", color: "#333" },
   sidebarSection: { marginBottom: "25px", display: "flex", flexDirection: "column" },
   sidebarSectionTitle: { padding: "0 20px", fontSize: "12px", fontWeight: "bold", color: "#888", letterSpacing: "1px", marginBottom: "10px" },
@@ -118,23 +204,110 @@ const styles = {
   sidebarLinkActive: { display: "block", padding: "12px 20px", textDecoration: "none", fontSize: "15px", fontWeight: "600", backgroundColor: "#e6f4cd", color: "#5a7d3c", borderLeft: "4px solid #7A9D54" },
   sidebarFooter: { marginTop: "auto", padding: "20px 0", borderTop: "1px solid #e0e0e0" },
   sidebarLinkConfig: { display: "flex", alignItems: "center", gap: "10px", padding: "12px 20px", color: "#444", textDecoration: "none", fontSize: "15px", fontWeight: "600" },
-  mainContent: { flex: 1, display: "flex", flexDirection: "column" },
-  banner: { background: "#7A9D54", color: "#fff", display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 24px" },
+  
+  // CAMBIO: minWidth: 0 para evitar desbordes
+  mainContent: { 
+    flex: 1, 
+    display: "flex", 
+    flexDirection: "column", 
+    overflowY: "auto",
+    minWidth: 0 
+  },
+  banner: {background: "#7A9D54", color: "#fff", display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 24px"},
   brand: { display: "flex", alignItems: "center", gap: 10 },
   brandTitle: { margin: 0, fontSize: 24, lineHeight: 1, fontWeight: 900, textShadow: "1px 1px 2px rgba(0,0,0,0.3)" },
   brandSubtitle: { display: "block", fontSize: 10, letterSpacing: 1, opacity: 0.9 },
-  bannerRight: { display: "flex", alignItems: "center", gap: 14 },
+  
+  // CAMBIO: position relative para el menú de usuario
+  bannerRight: { display: "flex", alignItems: "center", gap: 14, position: "relative" },
+  
   tempBadge: { background: "rgba(0,0,0,0.3)", padding: "6px 14px", borderRadius: 20, fontWeight: 600 },
   iconCircle: { width: 38, height: 38, borderRadius: "50%", background: "rgba(0,0,0,0.3)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18 },
+
+  // ESTILOS DEL MENÚ DE USUARIO
+  userMenu: {
+    position: "absolute",
+    top: 65,
+    right: 0,
+    width: 260,
+    backgroundColor: "#2E5233",
+    borderRadius: 12,
+    padding: "16px",
+    color: "#fff",
+    boxShadow: "0 8px 20px rgba(0,0,0,0.25)",
+    zIndex: 100,
+    fontFamily: "sans-serif",
+  },
+  userMenuHeader: {
+    display: "flex",
+    alignItems: "center",
+    gap: 12,
+    borderBottom: "1px solid rgba(255,255,255,0.15)",
+    paddingBottom: 12,
+    marginBottom: 12,
+  },
+  userMenuAvatar: {
+    fontSize: 28,
+    backgroundColor: "rgba(255,255,255,0.1)",
+    borderRadius: "50%",
+    width: 44,
+    height: 44,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  userMenuInfo: {
+    display: "flex",
+    flexDirection: "column",
+  },
+  userMenuName: {
+    fontSize: 15,
+    fontWeight: "bold",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  userMenuEmail: {
+    fontSize: 12,
+    opacity: 0.85,
+  },
+  userMenuOptions: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 10,
+    marginBottom: 12,
+  },
+  userMenuOption: {
+    fontSize: 14,
+    cursor: "pointer",
+    display: "flex",
+    alignItems: "center",
+    padding: "4px 0",
+    transition: "opacity 0.2s",
+  },
+  userMenuBullet: {
+    marginRight: 8,
+    fontSize: 18,
+    lineHeight: 1,
+  },
+  userMenuLogout: {
+    display: "flex",
+    alignItems: "center",
+    fontSize: 14,
+    cursor: "pointer",
+    borderTop: "1px solid rgba(255,255,255,0.15)",
+    paddingTop: 12,
+    fontWeight: "bold",
+  },
+
   leftGreyBar: { width: 60, backgroundColor: "#e4e4e4", display: "flex", flexDirection: "column", alignItems: "center", padding: "20px 0" },
-  main: { flex: 1, padding: "30px 40px", overflowY: "auto" },
+  main: { flex: 1, padding: "30px 40px", overflowY: "auto", overflowX: "auto" },
   pageTitle: { margin: "0 0 5px 0", fontSize: 24, fontWeight: "500", color: "#222" },
   pageSubtitle: { margin: "0 0 30px 0", fontSize: 14, color: "#888" },
   configContainer: { display: "flex", flexDirection: "column", gap: 30 },
   section: { display: "flex", flexDirection: "column", gap: 15 },
   sectionTitle: { margin: 0, fontSize: 16, fontWeight: "bold", color: "#222" },
   sectionDesc: { margin: "0 0 10px 0", fontSize: 13, color: "#888" },
-  row: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "5px 0" },
+  row: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "5px 0", flexWrap: "wrap", gap: 10 },
   itemTitle: { fontSize: 15, fontWeight: "bold", color: "#222", marginBottom: 4 },
   itemDesc: { fontSize: 13, color: "#888" },
   iconBadge: { width: 36, height: 36, borderRadius: "50%", backgroundColor: "#ccc", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18 },

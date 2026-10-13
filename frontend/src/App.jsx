@@ -12,6 +12,8 @@ import Nodo2 from "./pages/Nodo2";
 import Nodo3 from "./pages/Nodo3";
 import Nodo4 from "./pages/Nodo4";
 import RecuperarContra from "./components/recuperarcontra"; 
+import Bitacoras from "./pages/Bitacoras";
+
 
 function App() {
   const [usuario, setUsuario] = useState(null);
@@ -45,6 +47,8 @@ function App() {
         <Route path="/nodo2" element={usuario ? <Nodo2 /> : <Navigate to="/login" />} />
         <Route path="/nodo3" element={usuario ? <Nodo3 /> : <Navigate to="/login" />} />
         <Route path="/nodo4" element={usuario ? <Nodo4 /> : <Navigate to="/login" />} />
+        <Route path="/Bitacoras" element={usuario ? <Bitacoras /> : <Navigate to="/login" />} />
+        
 
         <Route path="/config-admin" element={usuario ? <ConfigAdmin /> : <Navigate to="/login" />} />
         <Route path="/config-cuenta" element={usuario ? <ConfigCuenta /> : <Navigate to="/login" />} />

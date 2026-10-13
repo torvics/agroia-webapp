@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useNavigate, Link, useLocation } from "react-router-dom";
+import logoAgroIA from "../assets/agroia-logo.png"; 
 
 const DATOS_EJEMPLO = {
   clima: { temperatura: 36 },
@@ -67,11 +68,19 @@ function LineChart({ series }) {
   );
 }
 
-function NodoToggle({ nombre, encendido, onChange }) {
+// CAMBIO: Se agregó la prop "deshabilitado" para bloquear el toggle
+function NodoToggle({ nombre, encendido, onChange, deshabilitado }) {
   return (
-    <div style={styles.nodoToggle}>
+    <div style={{ ...styles.nodoToggle, opacity: deshabilitado ? 0.5 : 1 }}>
       <span>{nombre}</span>
-      <div onClick={onChange} style={{ ...styles.switch, background: encendido ? "#2f7bd6" : "#ccc" }}>
+      <div 
+        onClick={deshabilitado ? null : onChange} 
+        style={{ 
+          ...styles.switch, 
+          background: deshabilitado ? "#e0e0e0" : (encendido ? "#2f7bd6" : "#ccc"),
+          cursor: deshabilitado ? "not-allowed" : "pointer"
+        }}
+      >
         <div style={{ ...styles.switchKnob, left: encendido ? 20 : 2 }} />
       </div>
     </div>
@@ -84,23 +93,50 @@ export default function Dashboard({ usuario, onLogout }) {
   // Estado que controla si la barra está abierta o cerrada (empieza en false)
   const [sidebarAbierta, setSidebarAbierta] = useState(false); 
   
+  // Estado para el menú de usuario
+  const [menuAbierto, setMenuAbierto] = useState(false);
+  
+  // NUEVO: Estado para el tipo de riego (Manual, Automático, Inteligente)
+  const [tipoRiego, setTipoRiego] = useState(datos.riego.tipo);
+  
   const navigate = useNavigate();
   const location = useLocation();
 
+  // NUEVO: Determina si los toggles de nodos deben estar deshabilitados
+  const togglesDeshabilitados = tipoRiego === "Automático" || tipoRiego === "Inteligente";
+
   const toggleNodo = (id) => {
+    // Si los toggles están deshabilitados, no hacer nada
+    if (togglesDeshabilitados) return;
+    
     setDatos((prev) => ({
       ...prev,
       nodos: prev.nodos.map((n) => n.id === id ? { ...n, encendido: !n.encendido } : n),
     }));
   };
 
+  // NUEVO: Función para cerrar sesión
+  const handleLogout = () => {
+    localStorage.removeItem("token");
+    window.location.href = "/login";
+  };
+
   return (
     <div style={styles.app}>
       
+      {/* Estilos de impresión: ocultan todo menos el reporte */}
+      <style>{`
+        @media print {
+          body * { visibility: hidden; }
+          .no-imprimir { display: none !important; }
+        }
+      `}</style>
+
       {/* SIDEBAR DESPLEGABLE CON NUEVO DISEÑO */}
-      <aside style={{
+      <aside className="no-imprimir" style={{
         ...styles.sidebar,
         width: sidebarAbierta ? 250 : 0,
+        minWidth: sidebarAbierta ? 250 : 0,
         padding: sidebarAbierta ? "0" : "0",
         borderRight: sidebarAbierta ? "1px solid #e0e0e0" : "none",
         opacity: sidebarAbierta ? 1 : 0,
@@ -114,6 +150,7 @@ export default function Dashboard({ usuario, onLogout }) {
           <div style={styles.sidebarSection}>
             <div style={styles.sidebarSectionTitle}>PRINCIPAL</div>
             <Link to="/dashboard" style={location.pathname === "/dashboard" ? styles.sidebarLinkActive : styles.sidebarLink}>Vista general</Link>
+            <Link to="/Bitacoras" style={location.pathname === "/Bitacoras" ? styles.sidebarLinkActive : styles.sidebarLink}>Bitácoras</Link>
           </div>
 
           <div style={styles.sidebarSection}>
@@ -134,29 +171,57 @@ export default function Dashboard({ usuario, onLogout }) {
 
       {/* CONTENIDO PRINCIPAL */}
       <div style={styles.mainContent}>
-        <header style={styles.banner}>
-          <div style={styles.brand}>
-            <span style={{ fontSize: 28 }}>🌱</span>
-            <div>
-              <h1 style={styles.brandTitle}>Agro IA</h1>
-              <small style={styles.brandSubtitle}>RIEGO INTELIGENTE</small>
-            </div>
-          </div>
+        <header className="no-imprimir" style={styles.banner}>
+          <Link to="/dashboard" style={{ textDecoration: "none", display: "flex", alignItems: "center" }}>
+            <img 
+              src={logoAgroIA} 
+              alt="Agro IA - Riego Inteligente" 
+              style={{ height: 60, cursor: "pointer" }} 
+             />
+          </Link>
+          
           <div style={styles.bannerRight}>
             <div style={styles.tempBadge}>{datos.clima.temperatura} °C</div>
             <div style={styles.iconCircle}>🔔</div>
-            {/* ICONO DEL USUARIO QUE LLEVA A CONFIG CUENTA */}
+            
             <div 
               style={{ ...styles.iconCircle, cursor: "pointer" }}
-              onClick={() => navigate("/config-cuenta")}
+              onClick={() => setMenuAbierto(!menuAbierto)}
             >
               👤
             </div>
+
+            {menuAbierto && (
+              <div style={styles.userMenu}>
+                <div style={styles.userMenuHeader}>
+                  <div style={styles.userMenuAvatar}>👤</div>
+                  <div style={styles.userMenuInfo}>
+                    <div style={styles.userMenuName}>JOSE BUZANI</div>
+                    <div style={styles.userMenuEmail}>Josebuzani06@gmail.com</div>
+                  </div>
+                </div>
+
+                <div style={styles.userMenuOptions}>
+                  <div style={styles.userMenuOption} onClick={() => { navigate("/config-admin"); setMenuAbierto(false); }}>
+                    <span style={styles.userMenuBullet}>•</span> Gestión de usuarios
+                  </div>
+                  <div style={styles.userMenuOption} onClick={() => { setMenuAbierto(false); }}>
+                    <span style={styles.userMenuBullet}>•</span> Cambiar cuenta
+                  </div>
+                  <div style={styles.userMenuOption} onClick={() => { navigate("/config-cuenta"); setMenuAbierto(false); }}>
+                    <span style={styles.userMenuBullet}>•</span> Gestión de cuenta
+                  </div>
+                </div>
+
+                <div style={styles.userMenuLogout} onClick={handleLogout}>
+                  <span style={{ marginRight: 8 }}>🚪</span> Cerrar sesión
+                </div>
+              </div>
+            )}
           </div>
         </header>
 
-        <div style={styles.toolbar}>
-          {/* BOTÓN HAMBURGUESA: Solo se ve si la sidebar está cerrada */}
+        <div className="no-imprimir" style={styles.toolbar}>
           {!sidebarAbierta && (
             <span 
               style={{ fontSize: 24, cursor: "pointer", marginRight: 10 }} 
@@ -180,17 +245,29 @@ export default function Dashboard({ usuario, onLogout }) {
           <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 15 }}>
             <div style={styles.selectGroupContainer}>
               <span style={{ fontSize: 10, color: "#777", marginBottom: 2 }}>Tipo de Riego</span>
-              <select style={styles.select} defaultValue={datos.riego.tipo}>
+              {/* CAMBIO: Se agregó value y onChange para controlar el estado */}
+              <select 
+                style={styles.select} 
+                value={tipoRiego} 
+                onChange={(e) => setTipoRiego(e.target.value)}
+              >
                 <option>Manual</option>
                 <option>Automático</option>
+                <option>Inteligente</option>
               </select>
             </div>
             
             {datos.nodos.map((n) => (
-              <NodoToggle key={n.id} nombre={n.nombre} encendido={n.encendido} onChange={() => toggleNodo(n.id)} />
+              <NodoToggle 
+                key={n.id} 
+                nombre={n.nombre} 
+                encendido={n.encendido} 
+                onChange={() => toggleNodo(n.id)} 
+                deshabilitado={togglesDeshabilitados} // CAMBIO: se pasa la prop
+              />
             ))}
             
-            <button onClick={onLogout} style={styles.logoutBtn}>Salir</button>
+            <button onClick={handleLogout} style={styles.logoutBtn}>Salir</button>
           </div>
         </div>
 
@@ -250,10 +327,25 @@ export default function Dashboard({ usuario, onLogout }) {
 }
 
 const styles = {
-  app: { display: "flex", maxWidth: 1150, minHeight: 800, margin: "20px auto", background: "#fdfdfd", borderRadius: 8, overflow: "hidden", boxShadow: "0 2px 10px rgba(0,0,0,0.15)", fontFamily: "sans-serif" },
+  app: { 
+    display: "flex", 
+    maxWidth: "100%", 
+    minHeight: "100vh", 
+    margin: 0, 
+    background: "#fdfdfd", 
+    fontFamily: "sans-serif" 
+  },
   
-  // Sidebar Estilos unificados
-  sidebar: { backgroundColor: "#f4f6f8", display: "flex", flexDirection: "column", boxSizing: "border-box", transition: "all 0.3s ease", overflow: "hidden", whiteSpace: "nowrap", zIndex: 10 },
+  sidebar: { 
+    backgroundColor: "#f4f6f8", 
+    display: "flex", 
+    flexDirection: "column", 
+    boxSizing: "border-box", 
+    transition: "width 0.3s ease, min-width 0.3s ease, opacity 0.3s ease", 
+    overflow: "hidden", 
+    whiteSpace: "nowrap", 
+    zIndex: 10 
+  },
   sidebarHeader: { display: "flex", alignItems: "center", padding: "20px 20px", borderBottom: "1px solid #e0e0e0", marginBottom: "20px", color: "#333" },
   sidebarSection: { marginBottom: "25px", display: "flex", flexDirection: "column" },
   sidebarSectionTitle: { padding: "0 20px", fontSize: "12px", fontWeight: "bold", color: "#888", letterSpacing: "1px", marginBottom: "10px" },
@@ -262,26 +354,114 @@ const styles = {
   sidebarFooter: { marginTop: "auto", padding: "20px 0", borderTop: "1px solid #e0e0e0" },
   sidebarLinkConfig: { display: "flex", alignItems: "center", gap: "10px", padding: "12px 20px", color: "#444", textDecoration: "none", fontSize: "15px", fontWeight: "600" },
 
-  mainContent: { flex: 1, display: "flex", flexDirection: "column", overflowY: "auto" },
-  banner: { background: "#7A9D54", color: "#fff", display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 24px" },
+  mainContent: { 
+    flex: 1, 
+    display: "flex", 
+    flexDirection: "column", 
+    overflowY: "auto",
+    minWidth: 0 
+  },
+  banner: {background: "#7A9D54", color: "#fff", display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 24px"},
   brand: { display: "flex", alignItems: "center", gap: 10 },
   brandTitle: { margin: 0, fontSize: 24, lineHeight: 1, fontWeight: 900, textShadow: "1px 1px 2px rgba(0,0,0,0.3)" },
   brandSubtitle: { display: "block", fontSize: 10, letterSpacing: 1, opacity: 0.9 },
-  bannerRight: { display: "flex", alignItems: "center", gap: 14 },
+  
+  bannerRight: { display: "flex", alignItems: "center", gap: 14, position: "relative" },
+  
   tempBadge: { background: "rgba(0,0,0,0.3)", padding: "6px 14px", borderRadius: 20, fontWeight: 600 },
   iconCircle: { width: 38, height: 38, borderRadius: "50%", background: "rgba(0,0,0,0.3)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18 },
   
-  toolbar: { display: "flex", alignItems: "center", gap: 15, padding: "14px 24px", borderBottom: "1px solid #eee", background: "#fff" },
+  userMenu: {
+    position: "absolute",
+    top: 65,
+    right: 0,
+    width: 260,
+    backgroundColor: "#2E5233",
+    borderRadius: 12,
+    padding: "16px",
+    color: "#fff",
+    boxShadow: "0 8px 20px rgba(0,0,0,0.25)",
+    zIndex: 100,
+    fontFamily: "sans-serif",
+  },
+  userMenuHeader: {
+    display: "flex",
+    alignItems: "center",
+    gap: 12,
+    borderBottom: "1px solid rgba(255,255,255,0.15)",
+    paddingBottom: 12,
+    marginBottom: 12,
+  },
+  userMenuAvatar: {
+    fontSize: 28,
+    backgroundColor: "rgba(255,255,255,0.1)",
+    borderRadius: "50%",
+    width: 44,
+    height: 44,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  userMenuInfo: {
+    display: "flex",
+    flexDirection: "column",
+  },
+  userMenuName: {
+    fontSize: 15,
+    fontWeight: "bold",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  userMenuEmail: {
+    fontSize: 12,
+    opacity: 0.85,
+  },
+  userMenuOptions: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 10,
+    marginBottom: 12,
+  },
+  userMenuOption: {
+    fontSize: 14,
+    cursor: "pointer",
+    display: "flex",
+    alignItems: "center",
+    padding: "4px 0",
+    transition: "opacity 0.2s",
+  },
+  userMenuBullet: {
+    marginRight: 8,
+    fontSize: 18,
+    lineHeight: 1,
+  },
+  userMenuLogout: {
+    display: "flex",
+    alignItems: "center",
+    fontSize: 14,
+    cursor: "pointer",
+    borderTop: "1px solid rgba(255,255,255,0.15)",
+    paddingTop: 12,
+    fontWeight: "bold",
+  },
+  
+  toolbar: { display: "flex", alignItems: "center", gap: 15, padding: "14px 24px", borderBottom: "1px solid #eee", background: "#fff", flexWrap: "wrap" },
   mapIconBorder: { border: "2px solid #ccc", borderRadius: 12, padding: "4px 8px" },
   dots: { display: "flex", gap: 6, marginTop: 4 },
   dot: { width: 10, height: 10, borderRadius: "50%", background: "#ddd", display: "inline-block" },
   selectGroupContainer: { border: "1px solid #ccc", borderRadius: 8, padding: "4px 8px", display: "flex", flexDirection: "column", background: "#fff" },
   select: { border: "none", outline: "none", background: "transparent", fontSize: 12 },
   nodoToggle: { display: "flex", flexDirection: "column", alignItems: "center", fontSize: 12, gap: 4 },
-  switch: { width: 38, height: 20, borderRadius: 20, position: "relative", cursor: "pointer", transition: "background 0.2s" },
+  switch: { width: 38, height: 20, borderRadius: 20, position: "relative", transition: "background 0.2s" },
   switchKnob: { content: "", position: "absolute", top: 2, width: 16, height: 16, borderRadius: "50%", background: "#fff", transition: "left 0.2s" },
   logoutBtn: { padding: "6px 12px", cursor: "pointer", border: "1px solid #ccc", borderRadius: 6, background: "#f9f9f9" },
-  main: { padding: "20px 24px 24px", background: "#f8f9fa", flex: 1 },
+  
+  main: { 
+    padding: "20px 24px 24px", 
+    background: "#f8f9fa", 
+    flex: 1,
+    overflowX: "auto" 
+  },
   sectionTitle: { margin: "0 0 20px", fontSize: 26, fontWeight: "bold" },
   gaugeGrid: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", gap: 14, marginBottom: 18 },
   gaugeCard: { border: "2px solid #eaeaea", borderRadius: 16, padding: "15px 10px", textAlign: "center", background: "#fff", boxShadow: "0 2px 8px rgba(0,0,0,0.02)" },
