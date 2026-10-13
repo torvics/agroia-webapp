@@ -12,6 +12,8 @@ from .routes.sensores_routes import ( sensores_bp, estacion_bp, nodos_datos_bp, 
 from .routes.bitacora_routes import bitacora_bp
 from .routes.alertas_routes import alertas_bp
 from .routes.reportes_routes import reportes_bp
+from . import models
+from .models import TokenRevocado
  
 from . import models  # noqa: F401  (registra los modelos para que Alembic los detecte)
  
@@ -25,6 +27,23 @@ def create_app():
     db.init_app(app)
     jwt.init_app(app)
     migrate.init_app(app, db)
+
+
+    # Verificación de tokens revocados en MySQL.
+    @jwt.token_in_blocklist_loader
+    def verificar_token_revocado(jwt_header, jwt_payload):
+
+        jti = jwt_payload["jti"]
+
+        token = (
+            db.session.query(TokenRevocado.id)
+            .filter_by(jti=jti)
+            .first()
+        )
+
+        # True significa que el JWT fue revocado.
+        return token is not None
+
  
     app.register_blueprint(auth_bp, url_prefix="/api/auth")
     app.register_blueprint(parcelas_bp, url_prefix="/api/parcelas")

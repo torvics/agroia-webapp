@@ -2,6 +2,13 @@ from flask import Blueprint, request, jsonify
 from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity, get_jwt
 
 from ..models import Usuario
+from datetime import datetime, timezone
+
+from flask import current_app
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
+
+from ..extensions import db
+from ..models import TokenRevocado
 
 auth_bp = Blueprint("auth", __name__)
 
@@ -36,4 +43,61 @@ def perfil():
         "id": usuario_id,
         "rol": claims.get("rol"),
         "nombre": claims.get("nombre"),
+    }), 200
+
+
+
+@auth_bp.route("/logout", methods=["POST"])
+@jwt_required()
+def logout():
+    """
+    Revoca el JWT utilizado en la solicitud.
+
+    El token queda invalidado en el backend,
+    incluso si todavía no ha expirado.
+    """
+
+    claims = get_jwt()
+
+    # Identificador único del JWT.
+    jti = claims["jti"]
+
+    # Fecha de expiración del token.
+    expiracion = datetime.fromtimestamp(
+        claims["exp"],
+        tz=timezone.utc
+    ).replace(tzinfo=None)
+
+    # Guardamos solamente el identificador.
+    token_revocado = TokenRevocado(
+        jti=jti,
+        fecha_expiracion=expiracion
+    )
+
+    try:
+        db.session.add(token_revocado)
+        db.session.commit()
+
+    except IntegrityError:
+        # La revocación ya fue registrada
+        # por otra solicitud simultánea.
+        db.session.rollback()
+
+        return jsonify({
+            "mensaje": "Sesión cerrada correctamente"
+        }), 200
+
+    except SQLAlchemyError:
+        db.session.rollback()
+
+        current_app.logger.exception(
+            "Error al revocar JWT durante logout"
+        )
+
+        return jsonify({
+            "error": "No fue posible cerrar la sesión"
+        }), 503
+
+    return jsonify({
+        "mensaje": "Sesión cerrada correctamente"
     }), 200
