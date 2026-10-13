@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useNavigate, Link, useLocation } from "react-router-dom";
+import logoAgroIA from "../assets/agroia-logo.png"; 
 
 const DATOS_GENERALES = { clima: { temperatura: 36 } };
 
@@ -49,7 +50,13 @@ export default function ConfigCuenta() {
 
       <div style={styles.mainContent}>
         <header style={styles.banner}>
-          <div style={styles.brand}><span style={{ fontSize: 28 }}>🌱</span><div><h1 style={styles.brandTitle}>Agro IA</h1><small style={styles.brandSubtitle}>RIEGO INTELIGENTE</small></div></div>
+          <Link to="/dashboard" style={{ textDecoration: "none", display: "flex", alignItems: "center" }}>
+            <img 
+              src={logoAgroIA} 
+              alt="Agro IA - Riego Inteligente" 
+              style={{ height: 60, cursor: "pointer" }} 
+             />
+          </Link>
           <div style={styles.bannerRight}>
             <div style={styles.tempBadge}>{DATOS_GENERALES.clima.temperatura} °C</div>
             <div style={styles.iconCircle}>🔔</div>
@@ -105,7 +112,7 @@ const styles = {
   sidebarFooter: { marginTop: "auto", padding: "20px 0", borderTop: "1px solid #e0e0e0" },
   sidebarLinkConfig: { display: "flex", alignItems: "center", gap: "10px", padding: "12px 20px", color: "#444", textDecoration: "none", fontSize: "15px", fontWeight: "600" },
   mainContent: { flex: 1, display: "flex", flexDirection: "column" },
-  banner: { background: "#7A9D54", color: "#fff", display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 24px" },
+ banner: {background: "#7A9D54", color: "#fff", display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 24px"},
   brand: { display: "flex", alignItems: "center", gap: 10 },
   brandTitle: { margin: 0, fontSize: 24, lineHeight: 1, fontWeight: 900, textShadow: "1px 1px 2px rgba(0,0,0,0.3)" },
   brandSubtitle: { display: "block", fontSize: 10, letterSpacing: 1, opacity: 0.9 },
