@@ -5,6 +5,7 @@ from influxdb_client.client.write_api import SYNCHRONOUS
 from datetime import datetime, timedelta, timezone
 from ..services.alertas_service import (evaluar_alerta_nodo, evaluar_alerta_estacion)
 
+import json, math
 from ..extensions import db
 from ..models import Nodo, Parcela
 from ..utils.auth_nodo import requiere_api_key
@@ -24,74 +25,255 @@ def _cliente_influx():
     return client, client.write_api(write_options=SYNCHRONOUS)
 
 
+
 @sensores_bp.route("/datos", methods=["POST"])
 @requiere_api_key
 def recibir_datos():
-    """La Estación (único nodo con internet) sube en una sola llamada sus propios
-    datos ambientales + los de los 4 nodos de suelo que recibió por LoRa.
-    Equivalente a guardar_sensores_estacion() + guardar_sensores_suelo() en el
-    firmware original, solo que ahora escriben a través del backend.
-
-    Body esperado:
-    {
-      "estacion": {"temp_ambiente":.., "humedad_ambiente":.., "lluvia_mm":..,
-                    "lluvia_acum_mm":.., "bateria_pct":..},
-      "nodos": [{"identificador":"1", "temp_suelo":.., "humedad_suelo":.., "bateria_pct":..}, ...]
-    }
     """
-    data = request.get_json() or {}
-    client, write_api = _cliente_influx()
+    Recibe las mediciones agrupadas de una estacion ESP32.
+    Valida todos los nodos antes de escribir en InfluxDB.
+    """
 
-    est = data.get("estacion", {})
-    if est:
-        punto_estacion = (
-            Point("sensores_estacion")
-            .field("temp_ambiente", float(est.get("temp_ambiente", 0)))
-            .field("humedad_ambiente", float(est.get("humedad_ambiente", 0)))
-            .field("lluvia_mm", float(est.get("lluvia_mm", 0)))
-            .field("lluvia_acum_mm", float(est.get("lluvia_acum_mm", 0)))
-            .field("bateria_pct", float(est.get("bateria_pct", 0)))
+    data = request.get_json(silent=True)
+
+    if not isinstance(data, dict):
+        return jsonify({
+            "error": "Se requiere un objeto JSON valido"
+        }), 400
+
+    estacion = data.get("estacion", {})
+    nodos = data.get("nodos", [])
+
+    if not isinstance(estacion, dict) or not isinstance(nodos, list):
+        return jsonify({
+            "error": "estacion debe ser un objeto y nodos una lista"
+        }), 400
+
+    if not estacion and not nodos:
+        return jsonify({
+            "error": "No se recibieron mediciones"
+        }), 400
+
+    def numero(datos, campo, defecto=0):
+        valor = datos.get(campo, defecto)
+
+        if isinstance(valor, bool):
+            raise ValueError(f"{campo} debe ser numerico")
+
+        convertido = float(valor)
+
+        if not math.isfinite(convertido):
+            raise ValueError(f"{campo} debe ser un numero finito")
+
+        return convertido
+
+    puntos = []
+    parcela_id = request.nodo.parcela_id
+    estacion_id = request.nodo.id
+    identificadores_recibidos = set()
+
+    try:
+        # 1. Preparar las mediciones ambientales
+        if estacion:
+            punto_estacion = (
+                Point("sensores_estacion")
+                .tag("parcela_id", str(parcela_id))
+                .tag("estacion_id", str(estacion_id))
+                .field(
+                    "temp_ambiente",
+                    numero(estacion, "temp_ambiente")
+                )
+                .field(
+                    "humedad_ambiente",
+                    numero(estacion, "humedad_ambiente")
+                )
+                .field(
+                    "lluvia_mm",
+                    numero(estacion, "lluvia_mm")
+                )
+                .field(
+                    "lluvia_acum_mm",
+                    numero(estacion, "lluvia_acum_mm")
+                )
+                .field(
+                    "bateria_pct",
+                    numero(estacion, "bateria_pct")
+                )
+            )
+
+            for campo in ("dds", "modo_riego"):
+                if campo in estacion:
+                    valor = numero(estacion, campo)
+
+                    if not valor.is_integer():
+                        raise ValueError(
+                            f"{campo} debe ser un entero"
+                        )
+
+                    punto_estacion.field(campo, int(valor))
+
+            puntos.append(punto_estacion)
+
+        # 2. Validar y preparar TODOS los nodos
+        for lectura in nodos:
+
+            if not isinstance(lectura, dict):
+                return jsonify({
+                    "error": "Cada nodo debe ser un objeto JSON"
+                }), 400
+
+            identificador = lectura.get("identificador")
+
+            if (
+                isinstance(identificador, bool)
+                or not isinstance(identificador, (str, int))
+                or not str(identificador).strip()
+            ):
+                return jsonify({
+                    "error": "Identificador de nodo invalido"
+                }), 400
+
+            identificador = str(identificador).strip()
+
+            if identificador in identificadores_recibidos:
+                return jsonify({
+                    "error": "Identificador de nodo duplicado"
+                }), 400
+
+            identificadores_recibidos.add(identificador)
+
+            nodo = Nodo.query.filter_by(
+                identificador=identificador,
+                tipo="sensor_suelo"
+            ).first()
+
+            if nodo is None:
+                return jsonify({
+                    "error": "Nodo no encontrado"
+                }), 404
+
+            if nodo.parcela_id != parcela_id:
+                return jsonify({
+                    "error": "Nodo no autorizado para esta estacion"
+                }), 403
+
+            if nodo.estado != "activo":
+                return jsonify({
+                    "error": "El nodo no esta activo"
+                }), 409
+
+            punto_nodo = (
+                Point("sensores_suelo")
+                .tag("parcela_id", str(parcela_id))
+                .tag("nodo_db_id", str(nodo.id))
+                .tag("nodo_id", str(nodo.identificador))
+                .field(
+                    "temp_suelo",
+                    numero(lectura, "temp_suelo")
+                )
+                .field(
+                    "humedad_suelo",
+                    numero(lectura, "humedad_suelo")
+                )
+                .field(
+                    "bateria_pct",
+                    numero(lectura, "bateria_pct")
+                )
+            )
+
+            puntos.append(punto_nodo)
+
+    except (TypeError, ValueError, OverflowError) as error:
+        return jsonify({
+            "error": str(error)
+        }), 400
+
+    # 3. Escribir solamente despues de validar el lote
+    client = None
+
+    try:
+        client, write_api = _cliente_influx()
+
+        write_api.write(
+            bucket=current_app.config["INFLUXDB_BUCKET"],
+            record=puntos
         )
-        # Campos opcionales enviados por el simulador
-        if "dds" in est: punto_estacion = punto_estacion.field( "dds", int(est["dds"]))
-        if "modo_riego" in est: punto_estacion = punto_estacion.field( "modo_riego", int(est["modo_riego"]))
 
-        write_api.write(bucket=current_app.config["INFLUXDB_BUCKET"], record=punto_estacion)
-
-    for n in data.get("nodos", []):
-        punto_nodo = (
-            Point("sensores_suelo")
-            .tag("nodo_id", str(n["identificador"]))
-            .field("temp_suelo", float(n.get("temp_suelo", 0)))
-            .field("humedad_suelo", float(n.get("humedad_suelo", 0)))
-            .field("bateria_pct", float(n.get("bateria_pct", 0)))
+    except Exception:
+        current_app.logger.exception(
+            "Error almacenando mediciones agrupadas"
         )
-        write_api.write(bucket=current_app.config["INFLUXDB_BUCKET"], record=punto_nodo)
 
-    client.close()
-    return jsonify({"status": "ok", "nodos_recibidos": len(data.get("nodos", []))}), 200
+        return jsonify({
+            "error": "No fue posible almacenar las mediciones"
+        }), 503
+
+    finally:
+        if client is not None:
+            client.close()
+
+    return jsonify({
+        "status": "ok",
+        "parcela_id": parcela_id,
+        "estacion_id": estacion_id,
+        "nodos_recibidos": len(nodos)
+    }), 200
+
 
 
 @sensores_bp.route("/actual/<string:identificador_nodo>", methods=["GET"])
 @jwt_required()
 def sensores_actual(identificador_nodo):
-    """Última lectura de un nodo de suelo específico ("1"-"4"), para el dashboard.
-    Para datos de la estación, usar /sensores/estacion en su lugar."""
-    client, _ = _cliente_influx()
-    query_api = client.query_api()
 
-    flux = f'''
-    from(bucket: "{current_app.config["INFLUXDB_BUCKET"]}")
-      |> range(start: -1h)
-      |> filter(fn: (r) => r._measurement == "sensores_suelo" and r.nodo_id == "{identificador_nodo}")
-      |> last()
-    '''
-    tables = query_api.query(flux)
-    resultado = {}
-    for table in tables:
-        for record in table.records:
-            resultado[record.get_field()] = record.get_value()
-    client.close()
+    usuario_id = int(get_jwt_identity())
+    rol = get_jwt().get("rol")
+
+    # Buscar el sensor en MySQL
+    nodo = Nodo.query.filter_by(
+        identificador=identificador_nodo,
+        tipo="sensor_suelo"
+    ).first()
+
+    if nodo is None:
+        return jsonify({
+            "error": "Nodo no encontrado"
+        }), 404
+
+    # Verificar que el usuario sea propietario
+    if rol != "admin":
+        if nodo.parcela.usuario_id != usuario_id:
+            return jsonify({
+                "error": "No autorizado para consultar este nodo"
+            }), 403
+
+    # Preparar los filtros de InfluxDB
+    identificador_flux = json.dumps(nodo.identificador)
+
+    client, _ = _cliente_influx()
+
+    try:
+        flux = f'''
+        from(bucket: "{current_app.config["INFLUXDB_BUCKET"]}")
+          |> range(start: -1h)
+          |> filter(fn: (r) =>
+              r._measurement == "sensores_suelo"
+              and r.nodo_id == {identificador_flux}
+              and r.parcela_id == "{nodo.parcela_id}"
+          )
+          |> last()
+        '''
+
+        tables = client.query_api().query(flux)
+
+        resultado = {}
+
+        for table in tables:
+            for record in table.records:
+                resultado[record.get_field()] = record.get_value()
+
+    finally:
+        client.close()
+
     return jsonify(resultado), 200
 
 
@@ -99,22 +281,56 @@ def sensores_actual(identificador_nodo):
 @jwt_required()
 def sensores_estacion_actual():
 
-    """Última lectura ambiental de la Estación (temp/humedad ambiente, lluvia)."""
-    client, _ = _cliente_influx()
-    query_api = client.query_api()
+    usuario_id = int(get_jwt_identity())
+    rol = get_jwt().get("rol")
 
-    flux = f'''
-    from(bucket: "{current_app.config["INFLUXDB_BUCKET"]}")
-      |> range(start: -1h)
-      |> filter(fn: (r) => r._measurement == "sensores_estacion")
-      |> last()
-    '''
-    tables = query_api.query(flux)
-    resultado = {}
-    for table in tables:
-        for record in table.records:
-            resultado[record.get_field()] = record.get_value()
-    client.close()
+    parcela_id = request.args.get(
+        "parcela_id",
+        type=int
+    )
+
+    if parcela_id is None or parcela_id <= 0:
+        return jsonify({
+            "error": "parcela_id valido es obligatorio"
+        }), 400
+
+    parcela = db.session.get(Parcela, parcela_id)
+
+    if parcela is None:
+        return jsonify({
+            "error": "Parcela no encontrada"
+        }), 404
+
+    if rol != "admin":
+        if parcela.usuario_id != usuario_id:
+            return jsonify({
+                "error": "No autorizado para consultar esta parcela"
+            }), 403
+
+    client, _ = _cliente_influx()
+
+    try:
+        flux = f'''
+        from(bucket: "{current_app.config["INFLUXDB_BUCKET"]}")
+          |> range(start: -1h)
+          |> filter(fn: (r) =>
+              r._measurement == "sensores_estacion"
+              and r.parcela_id == "{parcela_id}"
+          )
+          |> last()
+        '''
+
+        tables = client.query_api().query(flux)
+
+        resultado = {}
+
+        for table in tables:
+            for record in table.records:
+                resultado[record.get_field()] = record.get_value()
+
+    finally:
+        client.close()
+
     return jsonify(resultado), 200
 
 
@@ -935,6 +1151,157 @@ def obtener_lluvia():
         "estado": estado
     }), 200
 
+
+# =========================================================
+# FUNCION AUXILIAR - REGISTROS DE RIEGO
+# =========================================================
+
+def _guardar_registro_riego(medicion, campos):
+    """
+    Valida el nodo y almacena eventos o decisiones
+    de riego en InfluxDB.
+    """
+
+    datos = request.get_json(silent=True)
+
+    if not isinstance(datos, dict):
+        return jsonify({
+            "error": "Se requiere un objeto JSON valido"
+        }), 400
+
+    identificador = datos.get("identificador")
+
+    if (
+        isinstance(identificador, bool)
+        or not isinstance(identificador, (str, int))
+        or not str(identificador).strip()
+    ):
+        return jsonify({
+            "error": "Identificador de nodo invalido"
+        }), 400
+
+    identificador = str(identificador).strip()
+
+    # 1. Buscar el nodo en MySQL
+    nodo = Nodo.query.filter_by(
+        identificador=identificador,
+        tipo="sensor_suelo"
+    ).first()
+
+    if nodo is None:
+        return jsonify({
+            "error": "Nodo no encontrado"
+        }), 404
+
+    # 2. Verificar que pertenece a la misma parcela
+    # de la estacion autenticada mediante API key.
+    if nodo.parcela_id != request.nodo.parcela_id:
+        return jsonify({
+            "error": "Nodo no autorizado para esta estacion"
+        }), 403
+
+    # 3. Verificar que el nodo este activo
+    if nodo.estado != "activo":
+        return jsonify({
+            "error": "El nodo no esta activo"
+        }), 409
+
+    # 4. Validar los valores antes de escribir
+    valores = {}
+
+    try:
+        for campo, es_entero in campos:
+            dato = datos.get(campo, 0)
+
+            if isinstance(dato, bool):
+                raise ValueError(
+                    f"{campo} debe ser numerico"
+                )
+
+            numero = float(dato)
+
+            if not math.isfinite(numero):
+                raise ValueError(
+                    f"{campo} debe ser un numero finito"
+                )
+
+            if es_entero and not numero.is_integer():
+                raise ValueError(
+                    f"{campo} debe ser un entero"
+                )
+
+            valores[campo] = (
+                int(numero) if es_entero else numero
+            )
+
+    except (TypeError, ValueError, OverflowError) as error:
+        return jsonify({
+            "error": str(error)
+        }), 400
+
+    # 5. Validaciones especificas
+    if medicion == "eventos_riego":
+
+        if valores["estado"] not in (0, 1):
+            return jsonify({
+                "error": "estado debe ser 0 o 1"
+            }), 400
+
+        if (
+            valores["duracion_min"] < 0
+            or valores["litros"] < 0
+        ):
+            return jsonify({
+                "error": "Duracion y litros no pueden ser negativos"
+            }), 400
+
+    if medicion == "decisiones_riego":
+
+        if valores["decision"] not in (0, 1, 2):
+            return jsonify({
+                "error": "decision debe ser 0, 1 o 2"
+            }), 400
+
+    # 6. Crear el punto con identificadores reales
+    punto = (
+        Point(medicion)
+        .tag("parcela_id", str(nodo.parcela_id))
+        .tag("estacion_id", str(request.nodo.id))
+        .tag("nodo_db_id", str(nodo.id))
+        .tag("nodo_id", str(nodo.identificador))
+    )
+
+    for campo, valor in valores.items():
+        punto.field(campo, valor)
+
+    # 7. Guardar el registro en InfluxDB
+    client = None
+
+    try:
+        client, write_api = _cliente_influx()
+
+        write_api.write(
+            bucket=current_app.config["INFLUXDB_BUCKET"],
+            record=punto
+        )
+
+    except Exception:
+        current_app.logger.exception(
+            "Error almacenando %s",
+            medicion
+        )
+
+        return jsonify({
+            "error": "No fue posible almacenar el registro"
+        }), 503
+
+    finally:
+        if client is not None:
+            client.close()
+
+    return jsonify({"status": "ok"}), 200
+
+
 # =========================================================
 # SIMULADOR - EVENTOS DE RIEGO
 # POST /api/sensores/eventos-riego
@@ -944,46 +1311,24 @@ def obtener_lluvia():
 @requiere_api_key
 def recibir_evento_riego():
     """
-    La estación informa cuándo un relé se enciende
-    o se apaga.
+    Registra los eventos de encendido y apagado
+    del rele de riego.
 
-    Alimenta la gráfica de eventos de riego y permite
-    registrar duración, litros y humedad del suelo.
+    0 = Apagado
+    1 = Encendido
     """
 
-    d = request.get_json() or {}
-
-    if "identificador" not in d:
-        return jsonify({"error": "falta identificador"}), 400
-
-    client, write_api = _cliente_influx()
-
-    punto = (
-        Point("eventos_riego")
-        .tag("nodo_id", str(d["identificador"]))
-        .field("estado", int(d.get("estado", 0)))
-        .field("duracion_min", float(d.get("duracion_min", 0)))
-        .field("litros", float(d.get("litros", 0)))
-        .field(
-            "humedad_suelo_inicio",
-            float(d.get("humedad_suelo_inicio", 0))
-        )
-        .field(
-            "humedad_suelo_fin",
-            float(d.get("humedad_suelo_fin", 0))
-        )
-        .field("dds", int(d.get("dds", 0)))
+    return _guardar_registro_riego(
+        "eventos_riego",
+        [
+            ("estado", True),
+            ("duracion_min", False),
+            ("litros", False),
+            ("humedad_suelo_inicio", False),
+            ("humedad_suelo_fin", False),
+            ("dds", True)
+        ]
     )
-
-    try:
-        write_api.write(
-            bucket=current_app.config["INFLUXDB_BUCKET"],
-            record=punto
-        )
-    finally:
-        client.close()
-
-    return jsonify({"status": "ok"}), 200
 
 
 # =========================================================
@@ -1002,28 +1347,12 @@ def recibir_decision_riego():
     2 = Regar hoy
     """
 
-    d = request.get_json() or {}
-
-    if "identificador" not in d:
-        return jsonify({"error": "falta identificador"}), 400
-
-    client, write_api = _cliente_influx()
-
-    punto = (
-        Point("decisiones_riego")
-        .tag("nodo_id", str(d["identificador"]))
-        .field("decision", int(d.get("decision", 0)))
-        .field("agua_suelo", float(d.get("agua_suelo", 0)))
-        .field("eto", float(d.get("eto", 0)))
-        .field("dds", int(d.get("dds", 0)))
+    return _guardar_registro_riego(
+        "decisiones_riego",
+        [
+            ("decision", True),
+            ("agua_suelo", False),
+            ("eto", False),
+            ("dds", True)
+        ]
     )
-
-    try:
-        write_api.write(
-            bucket=current_app.config["INFLUXDB_BUCKET"],
-            record=punto
-        )
-    finally:
-        client.close()
-
-    return jsonify({"status": "ok"}), 200

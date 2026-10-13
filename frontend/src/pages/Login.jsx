@@ -3,7 +3,9 @@ import logoImg from "../assets/agroia-logo.png";
 import "./Login.css"; 
 import RecuperarContra from "../components/recuperarcontra"; 
 
-const API_URL = "http://localhost:5000";
+const API_URL = (
+  import.meta.env.VITE_API_URL || "http://localhost:5000/api"
+).replace(/\/api\/?$/, "");
 
 export default function Login({ onLogin }) {
   const [correo, setCorreo] = useState("");

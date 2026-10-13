@@ -3,7 +3,9 @@ import { useEffect, useState } from "react";
 import { useNavigate, Link, useLocation } from "react-router-dom";
 import logoAgroIA from "../assets/agroia-logo.png";
 
-const API_URL = "http://localhost:5000";
+const API_URL = (
+  import.meta.env.VITE_API_URL || "http://localhost:5000/api"
+).replace(/\/api\/?$/, "");
 const DATOS_GENERALES = { clima: { temperatura: 36 } };
 
 export default function ConfigAdmin() {
