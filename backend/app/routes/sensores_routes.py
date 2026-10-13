@@ -52,6 +52,10 @@ def recibir_datos():
             .field("lluvia_acum_mm", float(est.get("lluvia_acum_mm", 0)))
             .field("bateria_pct", float(est.get("bateria_pct", 0)))
         )
+        # Campos opcionales enviados por el simulador
+        if "dds" in est: punto_estacion = punto_estacion.field( "dds", int(est["dds"]))
+        if "modo_riego" in est: punto_estacion = punto_estacion.field( "modo_riego", int(est["modo_riego"]))
+
         write_api.write(bucket=current_app.config["INFLUXDB_BUCKET"], record=punto_estacion)
 
     for n in data.get("nodos", []):
@@ -930,3 +934,96 @@ def obtener_lluvia():
         "fecha_lectura": fecha.isoformat(),
         "estado": estado
     }), 200
+
+# =========================================================
+# SIMULADOR - EVENTOS DE RIEGO
+# POST /api/sensores/eventos-riego
+# =========================================================
+
+@sensores_bp.route("/eventos-riego", methods=["POST"])
+@requiere_api_key
+def recibir_evento_riego():
+    """
+    La estación informa cuándo un relé se enciende
+    o se apaga.
+
+    Alimenta la gráfica de eventos de riego y permite
+    registrar duración, litros y humedad del suelo.
+    """
+
+    d = request.get_json() or {}
+
+    if "identificador" not in d:
+        return jsonify({"error": "falta identificador"}), 400
+
+    client, write_api = _cliente_influx()
+
+    punto = (
+        Point("eventos_riego")
+        .tag("nodo_id", str(d["identificador"]))
+        .field("estado", int(d.get("estado", 0)))
+        .field("duracion_min", float(d.get("duracion_min", 0)))
+        .field("litros", float(d.get("litros", 0)))
+        .field(
+            "humedad_suelo_inicio",
+            float(d.get("humedad_suelo_inicio", 0))
+        )
+        .field(
+            "humedad_suelo_fin",
+            float(d.get("humedad_suelo_fin", 0))
+        )
+        .field("dds", int(d.get("dds", 0)))
+    )
+
+    try:
+        write_api.write(
+            bucket=current_app.config["INFLUXDB_BUCKET"],
+            record=punto
+        )
+    finally:
+        client.close()
+
+    return jsonify({"status": "ok"}), 200
+
+
+# =========================================================
+# SIMULADOR - DECISIONES DE RIEGO
+# POST /api/sensores/decisiones-riego
+# =========================================================
+
+@sensores_bp.route("/decisiones-riego", methods=["POST"])
+@requiere_api_key
+def recibir_decision_riego():
+    """
+    Registra las decisiones del modelo de riego.
+
+    0 = Sin riego
+    1 = Regar pronto
+    2 = Regar hoy
+    """
+
+    d = request.get_json() or {}
+
+    if "identificador" not in d:
+        return jsonify({"error": "falta identificador"}), 400
+
+    client, write_api = _cliente_influx()
+
+    punto = (
+        Point("decisiones_riego")
+        .tag("nodo_id", str(d["identificador"]))
+        .field("decision", int(d.get("decision", 0)))
+        .field("agua_suelo", float(d.get("agua_suelo", 0)))
+        .field("eto", float(d.get("eto", 0)))
+        .field("dds", int(d.get("dds", 0)))
+    )
+
+    try:
+        write_api.write(
+            bucket=current_app.config["INFLUXDB_BUCKET"],
+            record=punto
+        )
+    finally:
+        client.close()
+
+    return jsonify({"status": "ok"}), 200
