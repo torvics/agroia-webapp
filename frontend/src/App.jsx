@@ -1,7 +1,8 @@
-import { useState } from "react";
+
+import { useState, useEffect } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 
-// Componentes y Páginas
+// Componentes y páginas
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import ConfigAdmin from "./pages/ConfigAdmin";
@@ -11,48 +12,221 @@ import Nodo1 from "./pages/Nodo1";
 import Nodo2 from "./pages/Nodo2";
 import Nodo3 from "./pages/Nodo3";
 import Nodo4 from "./pages/Nodo4";
-import RecuperarContra from "./components/recuperarcontra"; 
+import RecuperarContra from "./components/recuperarcontra";
 import Bitacoras from "./pages/Bitacoras";
 
+const API_URL = (
+  import.meta.env.VITE_API_URL || "http://localhost:5000/api"
+).replace(/\/api\/?$/, "");
+
+function limpiarSesion() {
+  localStorage.removeItem("token");
+  localStorage.removeItem("access_token");
+  localStorage.removeItem("rol");
+  localStorage.removeItem("nombre");
+}
 
 function App() {
   const [usuario, setUsuario] = useState(null);
+  const [verificandoSesion, setVerificandoSesion] = useState(true);
+
+  // Recuperar la sesión al cargar o actualizar la página
+  useEffect(() => {
+    const controlador = new AbortController();
+
+    const token =
+      localStorage.getItem("access_token") ||
+      localStorage.getItem("token");
+
+    if (!token) {
+      setVerificandoSesion(false);
+      return () => controlador.abort();
+    }
+
+    async function recuperarSesion() {
+      try {
+        const respuesta = await fetch(`${API_URL}/api/auth/perfil`, {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+          signal: controlador.signal,
+        });
+
+        if (!respuesta.ok) {
+          throw new Error("La sesión ya no es válida");
+        }
+
+        const perfil = await respuesta.json();
+
+        if (!controlador.signal.aborted) {
+          setUsuario(perfil);
+        }
+      } catch (error) {
+        if (!controlador.signal.aborted) {
+          limpiarSesion();
+          setUsuario(null);
+        }
+      } finally {
+        if (!controlador.signal.aborted) {
+          setVerificandoSesion(false);
+        }
+      }
+    }
+
+    recuperarSesion();
+
+    return () => controlador.abort();
+  }, []);
 
   const handleLogout = () => {
-    localStorage.removeItem("token");
+    // Conservar el JWT para solicitar su revocación.
+    const token =
+      localStorage.getItem("access_token") ||
+      localStorage.getItem("token");
+
+    // Eliminar todas las credenciales locales.
+    limpiarSesion();
+
+    // Actualizar inmediatamente el estado de React.
     setUsuario(null);
+
+    // Solicitar la revocación del JWT en Flask.
+    if (token) {
+      fetch(`${API_URL}/api/auth/logout`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      })
+        .then((respuesta) => {
+          if (!respuesta.ok && respuesta.status !== 401) {
+            console.warn(
+              "No se pudo confirmar la revocación del JWT:",
+              respuesta.status
+            );
+          }
+        })
+        .catch((error) => {
+          console.warn(
+            "Sesión local cerrada, pero no se pudo confirmar la revocación en Flask:",
+            error
+          );
+        });
+    }
   };
+
+  // Evitar redirecciones mientras se comprueba el JWT
+  if (verificandoSesion) {
+    return (
+      <div style={{ padding: 30, textAlign: "center" }}>
+        Verificando sesión...
+      </div>
+    );
+  }
 
   return (
     <BrowserRouter>
       <Routes>
-        {/* Rutas Públicas */}
-        <Route path="/" element={<Navigate to={usuario ? "/dashboard" : "/login"} />} />
-        
-        <Route 
-          path="/login" 
-          element={!usuario ? <Login onLogin={setUsuario} /> : <Navigate to="/dashboard" />} 
-        />
-        
-        <Route path="/recuperar-password" element={<RecuperarContra />} />
-
-        {/* Rutas Protegidas */}
-        <Route 
-          path="/dashboard" 
-          element={usuario ? <Dashboard usuario={usuario} onLogout={handleLogout} /> : <Navigate to="/login" />} 
+        {/* Ruta inicial */}
+        <Route
+          path="/"
+          element={
+            <Navigate
+              to={usuario ? "/dashboard" : "/login"}
+              replace
+            />
+          }
         />
 
-        {/* Nodos de sensores */}
-        <Route path="/nodo1" element={usuario ? <Nodo1 /> : <Navigate to="/login" />} />
-        <Route path="/nodo2" element={usuario ? <Nodo2 /> : <Navigate to="/login" />} />
-        <Route path="/nodo3" element={usuario ? <Nodo3 /> : <Navigate to="/login" />} />
-        <Route path="/nodo4" element={usuario ? <Nodo4 /> : <Navigate to="/login" />} />
-        <Route path="/Bitacoras" element={usuario ? <Bitacoras /> : <Navigate to="/login" />} />
-        
+        {/* Rutas públicas */}
+        <Route
+          path="/login"
+          element={
+            !usuario ? (
+              <Login onLogin={setUsuario} />
+            ) : (
+              <Navigate to="/dashboard" replace />
+            )
+          }
+        />
 
-        <Route path="/config-admin" element={usuario ? <ConfigAdmin /> : <Navigate to="/login" />} />
-        <Route path="/config-cuenta" element={usuario ? <ConfigCuenta /> : <Navigate to="/login" />} />
-        <Route path="/config-general" element={usuario ? <ConfigGeneral /> : <Navigate to="/login" />} />
+        <Route
+          path="/recuperar-password"
+          element={<RecuperarContra />}
+        />
+
+        {/* Dashboard */}
+        <Route
+          path="/dashboard"
+          element={
+            usuario ? (
+              <Dashboard
+                usuario={usuario}
+                onLogout={handleLogout}
+              />
+            ) : (
+              <Navigate to="/login" replace />
+            )
+          }
+        />
+
+        {/* Pantallas de nodos */}
+        <Route
+          path="/nodo1"
+          element={usuario ? <Nodo1 /> : <Navigate to="/login" replace />}
+        />
+
+        <Route
+          path="/nodo2"
+          element={usuario ? <Nodo2 /> : <Navigate to="/login" replace />}
+        />
+
+        <Route
+          path="/nodo3"
+          element={usuario ? <Nodo3 /> : <Navigate to="/login" replace />}
+        />
+
+        <Route
+          path="/nodo4"
+          element={usuario ? <Nodo4 /> : <Navigate to="/login" replace />}
+        />
+
+        {/* Bitácoras */}
+        <Route
+          path="/Bitacoras"
+          element={usuario ? <Bitacoras /> : <Navigate to="/login" replace />}
+        />
+
+        {/* Configuración: solo administradores */}
+        <Route
+          path="/config-admin"
+          element={
+            !usuario ? (
+              <Navigate to="/login" replace />
+            ) : usuario.rol === "admin" ? (
+              <ConfigAdmin />
+            ) : (
+              <Navigate to="/dashboard" replace />
+            )
+          }
+        />
+
+        {/* Configuración de cuenta */}
+        <Route
+          path="/config-cuenta"
+          element={
+            usuario ? <ConfigCuenta onLogout={handleLogout} /> : <Navigate to="/login" replace />
+          }
+        />
+
+        {/* Configuración general */}
+        <Route
+          path="/config-general"
+          element={
+            usuario ? <ConfigGeneral /> : <Navigate to="/login" replace />
+          }
+        />
       </Routes>
     </BrowserRouter>
   );

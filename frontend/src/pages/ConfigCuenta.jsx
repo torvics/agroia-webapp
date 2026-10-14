@@ -1,98 +1,876 @@
-import { useState } from "react";
+
+import { useEffect, useState } from "react";
 import { useNavigate, Link, useLocation } from "react-router-dom";
-import logoAgroIA from "../assets/agroia-logo.png"; 
+import logoAgroIA from "../assets/agroia-logo.png";
 
-const DATOS_GENERALES = { clima: { temperatura: 36 } };
+const API_URL = (
+  import.meta.env.VITE_API_URL || "http://localhost:5000/api"
+).replace(/\/api\/?$/, "");
 
-export default function ConfigCuenta() {
+export default function ConfigCuenta({ onLogout }) {
   const [sidebarAbierta, setSidebarAbierta] = useState(false);
+  const [menuAbierto, setMenuAbierto] = useState(false);
+  const [perfil, setPerfil] = useState(null);
+  const [cargandoPerfil, setCargandoPerfil] = useState(true);
+  const [errorPerfil, setErrorPerfil] = useState("");
+  const [cerrandoSesion, setCerrandoSesion] = useState(false);
+  // Edición de perfil
+  // null: ningún campo en edición
+  // "nombre": editar solamente el nombre
+  // "correo": editar solamente el correo
+  const [campoEditando, setCampoEditando] = useState(null);
+  const [nombreFormulario, setNombreFormulario] = useState("");
+  const [correoFormulario, setCorreoFormulario] = useState("");
+  const [passwordActualCorreo, setPasswordActualCorreo] = useState("");
+  const [guardandoPerfil, setGuardandoPerfil] = useState(false);
+  const [mensajePerfil, setMensajePerfil] = useState("");
+  // Cambio de contraseña
+  const [passwordActual, setPasswordActual] = useState("");
+  const [passwordNueva, setPasswordNueva] = useState("");
+  const [confirmarPassword, setConfirmarPassword] = useState("");
+  const [guardandoPassword, setGuardandoPassword] = useState(false);
+
+
+
   const navigate = useNavigate();
   const location = useLocation();
 
-  const [alertaHumedad, setAlertaHumedad] = useState(true);
-  const [alertaBateria, setAlertaBateria] = useState(true);
+  // Consultar los datos reales del usuario autenticado.
+  useEffect(() => {
+    const controlador = new AbortController();
 
-  const handleGuardar = () => alert("Preferencias de cuenta guardadas");
-  const handleCancelar = () => navigate("/dashboard");
+    async function cargarPerfil() {
+      const token =
+        localStorage.getItem("access_token") ||
+        localStorage.getItem("token");
+
+      if (!token) {
+        setErrorPerfil("No hay una sesión activa.");
+        setCargandoPerfil(false);
+        return;
+      }
+
+      try {
+        const respuesta = await fetch(
+          `${API_URL}/api/auth/perfil`,
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+            signal: controlador.signal,
+          }
+        );
+
+        if (!respuesta.ok) {
+          throw new Error(
+            `No se pudo consultar el perfil. HTTP ${respuesta.status}`
+          );
+        }
+
+        const datos = await respuesta.json();
+
+        if (!controlador.signal.aborted) {
+          setPerfil(datos);
+
+          // Preparar los campos con información de MySQL
+          setNombreFormulario(datos.nombre ?? "");
+          setCorreoFormulario(datos.correo ?? "");
+
+          setErrorPerfil("");
+        }
+      } catch (error) {
+        if (!controlador.signal.aborted) {
+          setErrorPerfil(error.message);
+        }
+      } finally {
+        if (!controlador.signal.aborted) {
+          setCargandoPerfil(false);
+        }
+      }
+    }
+
+    cargarPerfil();
+
+    return () => controlador.abort();
+  }, []);
+
+  // Cerrar sesión y revocar el JWT en Flask.
+  const handleLogout = () => {
+    onLogout();
+  };
+
+
+
+const iniciarEdicion = (campo) => {
+  if (!perfil) return;
+
+  // Recuperar los valores originales.
+  setNombreFormulario(perfil.nombre ?? "");
+  setCorreoFormulario(perfil.correo ?? "");
+  setPasswordActualCorreo("");
+  setPasswordActual("");
+  setPasswordNueva("");
+  setConfirmarPassword("");
+
+  setErrorPerfil("");
+  setMensajePerfil("");
+  setCampoEditando(campo);
+};
+
+const cancelarEdicion = () => {
+  setNombreFormulario(perfil?.nombre ?? "");
+  setCorreoFormulario(perfil?.correo ?? "");
+  setPasswordActualCorreo("");
+  setPasswordActual("");
+  setPasswordNueva("");
+  setConfirmarPassword("");
+
+  setErrorPerfil("");
+  setCampoEditando(null);
+};
+
+const guardarPerfil = async () => {
+  if (guardandoPerfil || !perfil || !campoEditando) return;
+
+  setErrorPerfil("");
+  setMensajePerfil("");
+
+  // Solo enviaremos el campo que se está editando.
+  const cuerpo = {};
+
+  if (campoEditando === "nombre") {
+    const nuevoNombre = nombreFormulario.trim();
+
+    if (nuevoNombre.length < 2 || nuevoNombre.length > 100) {
+      setErrorPerfil("El nombre debe tener entre 2 y 100 caracteres.");
+      return;
+    }
+
+    if (nuevoNombre === perfil.nombre) {
+      setCampoEditando(null);
+      setMensajePerfil("No se realizaron cambios.");
+      return;
+    }
+
+    cuerpo.nombre = nuevoNombre;
+  }
+
+  if (campoEditando === "correo") {
+    const nuevoCorreo = correoFormulario.trim().toLowerCase();
+
+    const correoValido =
+      /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(nuevoCorreo);
+
+    if (!correoValido || nuevoCorreo.length > 150) {
+      setErrorPerfil("Introduce un correo electrónico válido.");
+      return;
+    }
+
+    if (nuevoCorreo === perfil.correo.toLowerCase()) {
+      setCampoEditando(null);
+      setPasswordActualCorreo("");
+      setMensajePerfil("No se realizaron cambios.");
+      return;
+    }
+
+    if (!passwordActualCorreo) {
+      setErrorPerfil(
+        "Introduce tu contraseña actual para cambiar el correo."
+      );
+      return;
+    }
+
+    cuerpo.correo = nuevoCorreo;
+    cuerpo.password_actual = passwordActualCorreo;
+  }
+
+  const token =
+    localStorage.getItem("access_token") ||
+    localStorage.getItem("token");
+
+  if (!token) {
+    setErrorPerfil("La sesión ha expirado. Inicia sesión nuevamente.");
+    return;
+  }
+
+  setGuardandoPerfil(true);
+
+  try {
+    const respuesta = await fetch(`${API_URL}/api/auth/perfil`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(cuerpo),
+    });
+
+    const resultado = await respuesta.json();
+
+    if (!respuesta.ok) {
+      throw new Error(
+        resultado.error ||
+        `Error al actualizar el perfil: HTTP ${respuesta.status}`
+      );
+    }
+
+    setPerfil(resultado);
+    setNombreFormulario(resultado.nombre);
+    setCorreoFormulario(resultado.correo);
+    setPasswordActualCorreo("");
+
+    localStorage.setItem("nombre", resultado.nombre);
+
+    setCampoEditando(null);
+    setMensajePerfil("Perfil actualizado correctamente.");
+  } catch (error) {
+    setErrorPerfil(error.message);
+  } finally {
+    setGuardandoPerfil(false);
+  }
+};
+
+
+
+const cambiarPassword = async () => {
+  if (guardandoPassword || campoEditando !== "password") return;
+
+  setErrorPerfil("");
+  setMensajePerfil("");
+
+  // Validar que los tres campos estén completos.
+  if (!passwordActual || !passwordNueva || !confirmarPassword) {
+    setErrorPerfil("Debes completar los tres campos.");
+    return;
+  }
+
+  // Respetar las validaciones implementadas en Flask.
+  if (passwordNueva.length < 12 || passwordNueva.length > 128) {
+    setErrorPerfil(
+      "La contraseña nueva debe tener entre 12 y 128 caracteres."
+    );
+    return;
+  }
+
+  if (passwordNueva !== confirmarPassword) {
+    setErrorPerfil("Las contraseñas nuevas no coinciden.");
+    return;
+  }
+
+  if (passwordActual === passwordNueva) {
+    setErrorPerfil(
+      "La nueva contraseña debe ser diferente de la actual."
+    );
+    return;
+  }
+
+  const token =
+    localStorage.getItem("access_token") ||
+    localStorage.getItem("token");
+
+  if (!token) {
+    setErrorPerfil("La sesión ha expirado. Inicia sesión nuevamente.");
+    return;
+  }
+
+  setGuardandoPassword(true);
+
+  try {
+    const respuesta = await fetch(
+      `${API_URL}/api/auth/password`,
+      {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          password_actual: passwordActual,
+          password_nueva: passwordNueva,
+        }),
+      }
+    );
+
+    const resultado = await respuesta.json();
+
+    if (!respuesta.ok) {
+      throw new Error(
+        resultado.error ||
+        `No se pudo cambiar la contraseña. HTTP ${respuesta.status}`
+      );
+    }
+
+    // Flask ya revocó el JWT utilizado.
+    // Eliminamos las credenciales de este navegador.
+    [
+      "access_token",
+      "token",
+      "rol",
+      "nombre",
+    ].forEach((clave) => localStorage.removeItem(clave));
+
+    setPasswordActual("");
+    setPasswordNueva("");
+    setConfirmarPassword("");
+
+    // Se requiere iniciar sesión con la contraseña nueva.
+    window.location.replace("/login");
+
+  } catch (error) {
+    setErrorPerfil(error.message);
+  } finally {
+    setGuardandoPassword(false);
+  }
+};
+
+
 
   const ListItem = ({ icono, titulo, subtitulo, rightElement }) => (
     <div style={styles.listItem}>
-      <div style={styles.listLeft}><div style={styles.iconSquare}>{icono}</div><div style={styles.listText}><div style={styles.listTitle}>{titulo}</div><div style={styles.listSubtitle}>{subtitulo}</div></div></div>
+      <div style={styles.listLeft}>
+        <div style={styles.iconSquare}>{icono}</div>
+        <div style={styles.listText}>
+          <div style={styles.listTitle}>{titulo}</div>
+          <div style={styles.listSubtitle}>{subtitulo}</div>
+        </div>
+      </div>
       <div>{rightElement}</div>
     </div>
   );
 
   return (
     <div style={styles.app}>
-      
-      <aside style={{ ...styles.sidebar, width: sidebarAbierta ? 250 : 0, padding: sidebarAbierta ? "0" : "0", borderRight: sidebarAbierta ? "1px solid #e0e0e0" : "none", opacity: sidebarAbierta ? 1 : 0 }}>
-        <div style={{ visibility: sidebarAbierta ? "visible" : "hidden", display: "flex", flexDirection: "column", height: "100%" }}>
+      {/* BARRA LATERAL */}
+      <aside
+        style={{
+          ...styles.sidebar,
+          width: sidebarAbierta ? 250 : 0,
+          padding: 0,
+          borderRight: sidebarAbierta
+            ? "1px solid #e0e0e0"
+            : "none",
+          opacity: sidebarAbierta ? 1 : 0,
+        }}
+      >
+        <div
+          style={{
+            visibility: sidebarAbierta ? "visible" : "hidden",
+            display: "flex",
+            flexDirection: "column",
+            height: "100%",
+          }}
+        >
           <div style={styles.sidebarHeader}>
-            <span style={{ fontSize: 24, cursor: "pointer", color: "#333", marginRight: 15 }} onClick={() => setSidebarAbierta(false)}>←</span>
+            <span
+              style={{ fontSize: 24, cursor: "pointer" }}
+              onClick={() => setSidebarAbierta(false)}
+            >
+              ←
+            </span>
             <h2 style={{ margin: 0, fontSize: 20 }}>Menú</h2>
           </div>
+
           <div style={styles.sidebarSection}>
             <div style={styles.sidebarSectionTitle}>PRINCIPAL</div>
-            <Link to="/dashboard" style={location.pathname === "/dashboard" ? styles.sidebarLinkActive : styles.sidebarLink}>Vista general</Link>
+            <Link
+              to="/dashboard"
+              style={
+                location.pathname === "/dashboard"
+                  ? styles.sidebarLinkActive
+                  : styles.sidebarLink
+              }
+            >
+              Vista general
+            </Link>
           </div>
+
           <div style={styles.sidebarSection}>
             <div style={styles.sidebarSectionTitle}>NODOS</div>
-            <Link to="/nodo1" style={location.pathname === "/nodo1" ? styles.sidebarLinkActive : styles.sidebarLink}>Nodo 1</Link>
-            <Link to="/nodo2" style={location.pathname === "/nodo2" ? styles.sidebarLinkActive : styles.sidebarLink}>Nodo 2</Link>
-            <Link to="/nodo3" style={location.pathname === "/nodo3" ? styles.sidebarLinkActive : styles.sidebarLink}>Nodo 3</Link>
-            <Link to="/nodo4" style={location.pathname === "/nodo4" ? styles.sidebarLinkActive : styles.sidebarLink}>Nodo 4</Link>
+            {[1, 2, 3, 4].map((numero) => (
+              <Link
+                key={numero}
+                to={`/nodo${numero}`}
+                style={
+                  location.pathname === `/nodo${numero}`
+                    ? styles.sidebarLinkActive
+                    : styles.sidebarLink
+                }
+              >
+                Nodo {numero}
+              </Link>
+            ))}
           </div>
+
           <div style={styles.sidebarFooter}>
-            <Link to="/config-general" style={styles.sidebarLinkConfig}><span>⚙️</span> Configuración</Link>
+            <Link
+              to="/config-general"
+              style={styles.sidebarLinkConfig}
+            >
+              <span>⚙️</span> Configuración
+            </Link>
           </div>
         </div>
       </aside>
 
+      {/* CONTENIDO PRINCIPAL */}
       <div style={styles.mainContent}>
         <header style={styles.banner}>
-          <Link to="/dashboard" style={{ textDecoration: "none", display: "flex", alignItems: "center" }}>
-            <img 
-              src={logoAgroIA} 
-              alt="Agro IA - Riego Inteligente" 
-              style={{ height: 60, cursor: "pointer" }} 
-             />
+          <Link
+            to="/dashboard"
+            style={{
+              textDecoration: "none",
+              display: "flex",
+              alignItems: "center",
+            }}
+          >
+            <img
+              src={logoAgroIA}
+              alt="Agro IA - Riego Inteligente"
+              style={{ height: 60 }}
+            />
           </Link>
-          <div style={styles.bannerRight}>
-            <div style={styles.tempBadge}>{DATOS_GENERALES.clima.temperatura} °C</div>
+
+          <div
+            style={{
+              ...styles.bannerRight,
+              position: "relative",
+            }}
+          >
+            <div style={styles.tempBadge}>— °C</div>
             <div style={styles.iconCircle}>🔔</div>
-            <div style={{ ...styles.iconCircle, cursor: "pointer", backgroundColor: "rgba(0,0,0,0.5)" }} onClick={() => navigate("/config-cuenta")}>👤</div>
+
+            {/* Menú de usuario */}
+            <button
+              type="button"
+              aria-label="Abrir menú de usuario"
+              style={{
+                ...styles.iconCircle,
+                border: "none",
+                cursor: "pointer",
+                backgroundColor: "rgba(0,0,0,0.5)",
+                color: "#fff",
+              }}
+              onClick={() => setMenuAbierto((anterior) => !anterior)}
+            >
+              👤
+            </button>
+
+            {menuAbierto && (
+              <div
+                style={{
+                  position: "absolute",
+                  top: 55,
+                  right: 0,
+                  width: 245,
+                  padding: 16,
+                  borderRadius: 12,
+                  backgroundColor: "#2E5233",
+                  color: "#fff",
+                  boxShadow: "0 8px 20px rgba(0,0,0,0.25)",
+                  zIndex: 100,
+                }}
+              >
+                <div style={{ fontWeight: "bold" }}>
+                  {perfil?.nombre ?? "Usuario"}
+                </div>
+
+                <div
+                  style={{
+                    fontSize: 12,
+                    opacity: 0.85,
+                    marginTop: 4,
+                    overflowWrap: "anywhere",
+                  }}
+                >
+                  {perfil?.correo ?? ""}
+                </div>
+
+                <hr
+                  style={{
+                    border: "none",
+                    borderTop: "1px solid rgba(255,255,255,0.2)",
+                    margin: "14px 0",
+                  }}
+                />
+
+                <button
+                  type="button"
+                  onClick={() => navigate("/dashboard")}
+                  style={estiloOpcionMenu}
+                >
+                  Vista general
+                </button>
+
+                {perfil?.rol === "admin" && (
+                  <button
+                    type="button"
+                    onClick={() => navigate("/config-admin")}
+                    style={estiloOpcionMenu}
+                  >
+                    Gestión de usuarios
+                  </button>
+                )}
+
+                <button
+                  type="button"
+                  onClick={handleLogout}
+                  disabled={cerrandoSesion}
+                  style={{
+                    ...estiloOpcionMenu,
+                    marginTop: 8,
+                    borderTop: "1px solid rgba(255,255,255,0.2)",
+                  }}
+                >
+                  {cerrandoSesion ? "Cerrando..." : "Cerrar sesión"}
+                </button>
+              </div>
+            )}
           </div>
         </header>
 
         <div style={{ display: "flex", flex: 1 }}>
           <div style={styles.leftGreyBar}>
-            {!sidebarAbierta && (<span style={{ fontSize: 28, cursor: "pointer", color: "#333" }} onClick={() => setSidebarAbierta(true)}>☰</span>)}
+            {!sidebarAbierta && (
+              <span
+                style={{
+                  fontSize: 28,
+                  cursor: "pointer",
+                  color: "#333",
+                }}
+                onClick={() => setSidebarAbierta(true)}
+              >
+                ☰
+              </span>
+            )}
           </div>
+
           <main style={styles.main}>
             <h1 style={styles.pageTitle}>Cuenta</h1>
 
+            {errorPerfil && (
+              <p style={{ color: "#b42318" }}>{errorPerfil}</p>
+            )}
+            {mensajePerfil && (
+              <p style={{ color: "#2F5413", fontWeight: "bold" }}>
+                {mensajePerfil}
+              </p>
+            )}
+
             <div style={styles.cardsContainer}>
+              {/* PERFIL REAL */}
               <div style={styles.card}>
                 <h3 style={styles.cardTitle}>PERFIL</h3>
+
                 <div style={styles.cardContent}>
-                  <ListItem icono="👤" titulo="Nombre" subtitulo="Mariana Sandoval" rightElement={<span style={styles.editIcon}>📝</span>} />
-                  <ListItem icono="✉️" titulo="Correo" subtitulo="mariana@agroia.mx" rightElement={<span style={styles.editIcon}>📝</span>} />
-                  <ListItem icono="🔒" titulo="Contraseña" subtitulo="Última actualización hace 3 meses" rightElement={<span style={styles.editIcon}>📝</span>} />
+
+                  {/* ========================= */}
+                  {/* NOMBRE */}
+                  {/* ========================= */}
+                  {campoEditando === "nombre" ? (
+                    <label style={{ fontWeight: "bold", fontSize: 14 }}>
+                      Nombre
+                      <input
+                        type="text"
+                        value={nombreFormulario}
+                        maxLength={100}
+                        onChange={(e) => setNombreFormulario(e.target.value)}
+                        style={{
+                          width: "100%",
+                          marginTop: 6,
+                          padding: 10,
+                          borderRadius: 8,
+                          border: "1px solid #aaa",
+                          boxSizing: "border-box",
+                        }}
+                      />
+                    </label>
+                  ) : (
+                    <ListItem
+                      icono="👤"
+                      titulo="Nombre"
+                      subtitulo={perfil?.nombre ?? "No disponible"}
+                      rightElement={
+                        <button
+                          type="button"
+                          disabled={campoEditando !== null || !perfil}
+                          aria-label="Editar nombre"
+                          onClick={() => iniciarEdicion("nombre")}
+                          style={{
+                            border: "none",
+                            background: "transparent",
+                            fontSize: 20,
+                            cursor: campoEditando ? "not-allowed" : "pointer",
+                            opacity: campoEditando ? 0.4 : 1,
+                          }}
+                        >
+                          📝
+                        </button>
+                      }
+                    />
+                  )}
+
+                  {/* ========================= */}
+                  {/* CORREO ELECTRÓNICO */}
+                  {/* ========================= */}
+                  {campoEditando === "correo" ? (
+                    <>
+                      <label style={{ fontWeight: "bold", fontSize: 14 }}>
+                        Correo electrónico
+                        <input
+                          type="email"
+                          value={correoFormulario}
+                          maxLength={150}
+                          onChange={(e) => setCorreoFormulario(e.target.value)}
+                          style={{
+                            width: "100%",
+                            marginTop: 6,
+                            padding: 10,
+                            borderRadius: 8,
+                            border: "1px solid #aaa",
+                            boxSizing: "border-box",
+                          }}
+                        />
+                      </label>
+
+                      <label style={{ fontWeight: "bold", fontSize: 14 }}>
+                        Contraseña actual
+                        <input
+                          type="password"
+                          value={passwordActualCorreo}
+                          onChange={(e) => setPasswordActualCorreo(e.target.value)}
+                          autoComplete="current-password"
+                          placeholder="Confirma tu contraseña"
+                          style={{
+                            width: "100%",
+                            marginTop: 6,
+                            padding: 10,
+                            borderRadius: 8,
+                            border: "1px solid #aaa",
+                            boxSizing: "border-box",
+                          }}
+                        />
+                      </label>
+                    </>
+                  ) : (
+                    <ListItem
+                      icono="✉️"
+                      titulo="Correo"
+                      subtitulo={perfil?.correo ?? "No disponible"}
+                      rightElement={
+                        <button
+                          type="button"
+                          disabled={campoEditando !== null || !perfil}
+                          aria-label="Editar correo electrónico"
+                          onClick={() => iniciarEdicion("correo")}
+                          style={{
+                            border: "none",
+                            background: "transparent",
+                            fontSize: 20,
+                            cursor: campoEditando ? "not-allowed" : "pointer",
+                            opacity: campoEditando ? 0.4 : 1,
+                          }}
+                        >
+                          📝
+                        </button>
+                      }
+                    />
+                  )}
+
+                  {/* ========================= */}
+                  {/* CONTRASEÑA */}
+                  {/* ========================= */}
+
+                  {campoEditando === "password" ? (
+                    <>
+                      <label style={{ fontWeight: "bold", fontSize: 14 }}>
+                        Contraseña actual
+                        <input
+                          type="password"
+                          value={passwordActual}
+                          onChange={(e) => setPasswordActual(e.target.value)}
+                          autoComplete="current-password"
+                          placeholder="Introduce tu contraseña actual"
+                          style={{
+                            width: "100%",
+                            marginTop: 6,
+                            padding: 10,
+                            borderRadius: 8,
+                            border: "1px solid #aaa",
+                            boxSizing: "border-box",
+                          }}
+                        />
+                      </label>
+
+                      <label style={{ fontWeight: "bold", fontSize: 14 }}>
+                        Nueva contraseña
+                        <input
+                          type="password"
+                          value={passwordNueva}
+                          onChange={(e) => setPasswordNueva(e.target.value)}
+                          autoComplete="new-password"
+                          minLength={12}
+                          maxLength={128}
+                          placeholder="Mínimo 12 caracteres"
+                          style={{
+                            width: "100%",
+                            marginTop: 6,
+                            padding: 10,
+                            borderRadius: 8,
+                            border: "1px solid #aaa",
+                            boxSizing: "border-box",
+                          }}
+                        />
+                      </label>
+
+                      <label style={{ fontWeight: "bold", fontSize: 14 }}>
+                        Confirmar nueva contraseña
+                        <input
+                          type="password"
+                          value={confirmarPassword}
+                          onChange={(e) => setConfirmarPassword(e.target.value)}
+                          autoComplete="new-password"
+                          placeholder="Repite la contraseña nueva"
+                          style={{
+                            width: "100%",
+                            marginTop: 6,
+                            padding: 10,
+                            borderRadius: 8,
+                            border: "1px solid #aaa",
+                            boxSizing: "border-box",
+                          }}
+                        />
+                      </label>
+                    </>
+                  ) : (
+                    <ListItem
+                      icono="🔒"
+                      titulo="Contraseña"
+                      subtitulo="Contraseña protegida"
+                      rightElement={
+                        <button
+                          type="button"
+                          disabled={campoEditando !== null || !perfil}
+                          aria-label="Cambiar contraseña"
+                          onClick={() => iniciarEdicion("password")}
+                          style={{
+                            border: "none",
+                            background: "transparent",
+                            fontSize: 20,
+                            cursor: campoEditando
+                              ? "not-allowed"
+                              : "pointer",
+                            opacity: campoEditando ? 0.4 : 1,
+                          }}
+                        >
+                          📝
+                        </button>
+                      }
+                    />
+                  )}
+
+
                 </div>
               </div>
+
+
+
+              {/* PREFERENCIAS TODAVÍA NO CONFIGURABLES */}
               <div style={styles.card}>
                 <h3 style={styles.cardTitle}>PREFERENCIAS RÁPIDAS</h3>
+
                 <div style={styles.cardContent}>
-                  <ListItem icono="🔔" titulo="Alertas de humedad baja" subtitulo="" rightElement={<div onClick={() => setAlertaHumedad(!alertaHumedad)} style={{...styles.toggleBgBlue, backgroundColor: alertaHumedad ? "#4b9af8" : "#ccc" }}><div style={{...styles.toggleKnob, left: alertaHumedad ? 22 : 2}} /></div>} />
-                  <ListItem icono="🔔" titulo="Batería baja del nodo" subtitulo="" rightElement={<div onClick={() => setAlertaBateria(!alertaBateria)} style={{...styles.toggleBgBlue, backgroundColor: alertaBateria ? "#4b9af8" : "#ccc" }}><div style={{...styles.toggleKnob, left: alertaBateria ? 22 : 2}} /></div>} />
-                  <ListItem icono="🌐" titulo="Idioma" subtitulo="" rightElement={<div style={styles.badge}>Español</div>} />
+                  <ListItem
+                    icono="🔔"
+                    titulo="Alertas de humedad baja"
+                    subtitulo="Pendiente de integración"
+                    rightElement={
+                      <div
+                        style={{
+                          ...styles.toggleBgBlue,
+                          backgroundColor: "#ccc",
+                          opacity: 0.55,
+                          cursor: "not-allowed",
+                        }}
+                      >
+                        <div style={{ ...styles.toggleKnob, left: 2 }} />
+                      </div>
+                    }
+                  />
+
+                  <ListItem
+                    icono="🔔"
+                    titulo="Batería baja del nodo"
+                    subtitulo="Pendiente de integración"
+                    rightElement={
+                      <div
+                        style={{
+                          ...styles.toggleBgBlue,
+                          backgroundColor: "#ccc",
+                          opacity: 0.55,
+                          cursor: "not-allowed",
+                        }}
+                      >
+                        <div style={{ ...styles.toggleKnob, left: 2 }} />
+                      </div>
+                    }
+                  />
+
+                  <ListItem
+                    icono="🌐"
+                    titulo="Idioma"
+                    subtitulo=""
+                    rightElement={
+                      <div style={styles.badge}>Español</div>
+                    }
+                  />
                 </div>
               </div>
             </div>
 
             <div style={styles.actionButtons}>
-              <button style={styles.cancelBtn} onClick={handleCancelar}>Cancelar</button>
-              <button style={styles.saveBtn} onClick={handleGuardar}>Guardar cambios</button>
+              <button
+                type="button"
+                style={styles.cancelBtn}
+                onClick={() => {
+                  if (campoEditando !== null) {
+                    cancelarEdicion();
+                  } else {
+                    navigate("/dashboard");
+                  }
+                }}
+              >
+                {campoEditando !== null ? "Cancelar" : "Volver"}
+              </button>
+
+              <button
+                type="button"
+                disabled={
+                  campoEditando === null ||
+                  guardandoPerfil ||
+                  guardandoPassword ||
+                  !perfil
+                }
+                onClick={
+                  campoEditando === "password"
+                    ? cambiarPassword
+                    : guardarPerfil
+                }
+                style={{
+                  ...styles.saveBtn,
+                  opacity:
+                    campoEditando === null || guardandoPerfil || guardandoPassword
+                      ? 0.5
+                      : 1,
+                  cursor:
+                    campoEditando === null || guardandoPerfil || guardandoPassword
+                      ? "not-allowed"
+                      : "pointer",
+                }}
+              >
+                {guardandoPerfil || guardandoPassword
+                  ? "Guardando..."
+                  : "Guardar cambios"}
+              </button>
             </div>
           </main>
         </div>
@@ -100,6 +878,18 @@ export default function ConfigCuenta() {
     </div>
   );
 }
+
+const estiloOpcionMenu = {
+  display: "block",
+  width: "100%",
+  padding: "10px 0",
+  background: "transparent",
+  border: "none",
+  color: "#fff",
+  textAlign: "left",
+  cursor: "pointer",
+  fontSize: 14,
+};
 
 const styles = {
   app: { display: "flex", maxWidth: 1150, minHeight: 800, margin: "20px auto", background: "#fcfafc", borderRadius: 8, overflow: "hidden", boxShadow: "0 2px 10px rgba(0,0,0,0.15)", fontFamily: "sans-serif" },

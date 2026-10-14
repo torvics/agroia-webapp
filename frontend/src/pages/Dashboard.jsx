@@ -1,27 +1,65 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate, Link, useLocation } from "react-router-dom";
 import logoAgroIA from "../assets/agroia-logo.png"; 
 
-const DATOS_EJEMPLO = {
-  clima: { temperatura: 36 },
-  nodos: [
-    { id: 1, nombre: "Nodo 1", encendido: true, humedad: 94.45, temperatura: 5, bateria: 81, estado: "RP" },
-    { id: 2, nombre: "Nodo 2", encendido: true, humedad: 67.2, temperatura: 17.8, bateria: 83, estado: "RP" },
-    { id: 3, nombre: "Nodo 3", encendido: true, humedad: 71.3, temperatura: 17.2, bateria: 81, estado: "RP" },
-    { id: 4, nombre: "Nodo 4", encendido: true, humedad: 64.3, temperatura: 14.1, bateria: 91, estado: "RP" },
-  ],
-  ambiente: { humedad: 65, temperatura: 18 },
-  suelo: { humedadPromedio: 94.45, temperaturaPromedio: 5 },
-  riego: { tipo: "Manual", dds: 0, lluviaActual: 0, lluviaAcumulada: 52 },
+const API_URL = (
+  import.meta.env.VITE_API_URL || "http://localhost:5000/api"
+).replace(/\/api\/?$/, "");
+
+const DATOS_VACIOS = {
+  clima: { temperatura: null },
+  nodos: [],
+  ambiente: {
+    humedad: null,
+    temperatura: null,
+  },
+  suelo: {
+    humedadPromedio: null,
+    temperaturaPromedio: null,
+  },
+  riego: {
+    tipo: "Manual",
+    dds: null,
+    lluviaActual: null,
+    lluviaAcumulada: null,
+  },
   historial: {
-    rojo: [40, 70, 20, 55, 15, 65],
-    azul: [20, 35, 55, 25, 60, 45],
-    verde: [30, 45, 70, 35, 55, 15],
+    rojo: [],
+    azul: [],
+    verde: [],
   },
 };
 
+async function consultarAPI(ruta, signal) {
+  const token =
+    localStorage.getItem("access_token") ||
+    localStorage.getItem("token");
+
+  if (!token) {
+    throw new Error("No hay una sesión activa.");
+  }
+
+  const respuesta = await fetch(`${API_URL}/api${ruta}`, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+    signal,
+  });
+
+  if (!respuesta.ok) {
+    throw new Error(
+      `Error HTTP ${respuesta.status} al consultar ${ruta}`
+    );
+  }
+
+  return respuesta.json();
+}
+
 function Gauge({ label, value, max = 100, unit = "%", color = "#3fb6b6" }) {
-  const pct = Math.min(100, (value / max) * 100);
+  const disponible = typeof value === "number" && Number.isFinite(value);
+  const pct = disponible
+    ? Math.max(0, Math.min(100, (value / max) * 100))
+    : 0;
   return (
     <div style={styles.gaugeCard}>
       <div style={styles.gaugeLabel}>{label}</div>
@@ -33,8 +71,8 @@ function Gauge({ label, value, max = 100, unit = "%", color = "#3fb6b6" }) {
           }}
         />
         <div style={styles.gaugeInner}>
-          {value}
-          <span style={{ fontSize: 10 }}>{unit}</span>
+          {disponible ? value : "—"}
+          {disponible && <span style={{ fontSize: 10 }}>{unit}</span>}
         </div>
       </div>
       <div style={styles.gaugeScale}>
@@ -45,28 +83,173 @@ function Gauge({ label, value, max = 100, unit = "%", color = "#3fb6b6" }) {
   );
 }
 
-function LineChart({ series }) {
-  const colors = { rojo: "#e05252", azul: "#2f7bd6", verde: "#5aa859" };
-  const width = 300;
-  const height = 140;
-  const padding = 10;
-  const toPoints = (arr) => {
-    const max = Math.max(...arr, 1);
-    const stepX = (width - padding * 2) / (arr.length - 1);
-    return arr.map((v, i) => {
-      const x = padding + i * stepX;
-      const y = height - padding - (v / max) * (height - padding * 2);
-      return `${x},${y}`;
-    }).join(" ");
-  };
+
+function LineChart({ nodos = [] }) {
+  const colores = [
+    "#8a5cd6",
+    "#3fb6b6",
+    "#2f7bd6",
+    "#a3c93f",
+    "#e05252",
+  ];
+
+  const ancho = 620;
+  const alto = 230;
+  const margen = { izquierda: 45, derecha: 15, arriba: 15, abajo: 42 };
+
+  const series = nodos
+    .map((nodo, indice) => ({
+      nombre: nodo.identificador || `Nodo ${nodo.nodo_id}`,
+      color: colores[indice % colores.length],
+      puntos: (nodo.lecturas ?? [])
+        .filter(
+          (lectura) =>
+            typeof lectura.humedad_suelo === "number" &&
+            Number.isFinite(lectura.humedad_suelo) &&
+            lectura.humedad_suelo >= 0 &&
+            lectura.humedad_suelo <= 100 &&
+            Number.isFinite(Date.parse(lectura.fecha))
+        )
+        .map((lectura) => ({
+          fecha: new Date(lectura.fecha).getTime(),
+          humedad: lectura.humedad_suelo,
+        }))
+        .sort((a, b) => a.fecha - b.fecha),
+    }))
+    .filter((serie) => serie.puntos.length > 0);
+
+  if (series.length === 0) {
+    return (
+      <p style={{ color: "#777", textAlign: "center" }}>
+        No hay mediciones históricas para esta parcela.
+      </p>
+    );
+  }
+
+  const fechas = series.flatMap((serie) =>
+    serie.puntos.map((punto) => punto.fecha)
+  );
+
+  const fechaMin = Math.min(...fechas);
+  const fechaMax = Math.max(...fechas);
+
+  const areaAncho = ancho - margen.izquierda - margen.derecha;
+  const areaAlto = alto - margen.arriba - margen.abajo;
+
+  const posicionX = (fecha) =>
+    fechaMax === fechaMin
+      ? margen.izquierda + areaAncho / 2
+      : margen.izquierda +
+        ((fecha - fechaMin) / (fechaMax - fechaMin)) * areaAncho;
+
+  const posicionY = (humedad) =>
+    margen.arriba + ((100 - humedad) / 100) * areaAlto;
+
+  const formatoFecha = (fecha) =>
+    new Date(fecha).toLocaleString("es-MX", {
+      day: "2-digit",
+      month: "short",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+
   return (
-    <svg viewBox={`0 0 ${width} ${height}`} width="100%" height="160">
-      {Object.entries(series).map(([key, arr]) => (
-        <polyline key={key} points={toPoints(arr)} fill="none" stroke={colors[key] || "#2f7bd6"} strokeWidth="3" />
-      ))}
-    </svg>
+    <div>
+      <svg
+        viewBox={`0 0 ${ancho} ${alto}`}
+        width="100%"
+        role="img"
+        aria-label="Histórico de humedad del suelo"
+      >
+        {[0, 25, 50, 75, 100].map((valor) => (
+          <g key={valor}>
+            <line
+              x1={margen.izquierda}
+              x2={ancho - margen.derecha}
+              y1={posicionY(valor)}
+              y2={posicionY(valor)}
+              stroke="#e9e9e9"
+            />
+            <text
+              x={8}
+              y={posicionY(valor) + 4}
+              fontSize="11"
+              fill="#777"
+            >
+              {valor}%
+            </text>
+          </g>
+        ))}
+
+        {series.map((serie) => (
+          <g key={serie.nombre}>
+            {serie.puntos.length > 1 && (
+              <polyline
+                points={serie.puntos
+                  .map(
+                    (punto) =>
+                      `${posicionX(punto.fecha)},${posicionY(punto.humedad)}`
+                  )
+                  .join(" ")}
+                fill="none"
+                stroke={serie.color}
+                strokeWidth="3"
+                strokeLinejoin="round"
+              />
+            )}
+
+            {serie.puntos.map((punto, indice) => (
+              <circle
+                key={`${punto.fecha}-${indice}`}
+                cx={posicionX(punto.fecha)}
+                cy={posicionY(punto.humedad)}
+                r="4"
+                fill={serie.color}
+              >
+                <title>
+                  {`${serie.nombre}: ${punto.humedad}% — ${formatoFecha(punto.fecha)}`}
+                </title>
+              </circle>
+            ))}
+          </g>
+        ))}
+
+        <text
+          x={margen.izquierda}
+          y={alto - 10}
+          fontSize="11"
+          fill="#777"
+        >
+          {formatoFecha(fechaMin)}
+        </text>
+
+        {fechaMax !== fechaMin && (
+          <text
+            x={ancho - margen.derecha}
+            y={alto - 10}
+            textAnchor="end"
+            fontSize="11"
+            fill="#777"
+          >
+            {formatoFecha(fechaMax)}
+          </text>
+        )}
+      </svg>
+
+      <div style={{ display: "flex", gap: 15, flexWrap: "wrap" }}>
+        {series.map((serie) => (
+          <span key={serie.nombre} style={{ fontSize: 12 }}>
+            <span style={{ color: serie.color, fontWeight: "bold" }}>
+              ●
+            </span>{" "}
+            {serie.nombre}
+          </span>
+        ))}
+      </div>
+    </div>
   );
 }
+
 
 // CAMBIO: Se agregó la prop "deshabilitado" para bloquear el toggle
 function NodoToggle({ nombre, encendido, onChange, deshabilitado }) {
@@ -87,8 +270,211 @@ function NodoToggle({ nombre, encendido, onChange, deshabilitado }) {
   );
 }
 
+
 export default function Dashboard({ usuario, onLogout }) {
-  const [datos, setDatos] = useState(DATOS_EJEMPLO);
+  const [datos, setDatos] = useState(DATOS_VACIOS);
+
+  const [perfil, setPerfil] = useState(usuario ?? null);
+  const [parcelas, setParcelas] = useState([]);
+  const [parcelaId, setParcelaId] = useState(null);
+  const [cargandoDatos, setCargandoDatos] = useState(false);
+  const [errorDatos, setErrorDatos] = useState("");
+  // Estados del histórico de humedad del suelo
+  const [historicoNodos, setHistoricoNodos] = useState([]);
+  const [cargandoHistorico, setCargandoHistorico] = useState(false);
+  const [errorHistorico, setErrorHistorico] = useState("");
+
+  // Cargar el perfil y las parcelas al entrar al dashboard.
+  useEffect(() => {
+    const controlador = new AbortController();
+
+    async function cargarInicial() {
+      try {
+        const [respuestaPerfil, respuestaParcelas] =
+          await Promise.all([
+            consultarAPI("/auth/perfil", controlador.signal),
+            consultarAPI("/parcelas", controlador.signal),
+          ]);
+
+        if (controlador.signal.aborted) return;
+
+        setPerfil(respuestaPerfil.usuario ?? respuestaPerfil);
+
+        const lista = Array.isArray(respuestaParcelas)
+          ? respuestaParcelas
+          : respuestaParcelas.parcelas ?? [];
+
+        setParcelas(lista);
+        setParcelaId(lista.length > 0 ? lista[0].id : null);
+      } catch (error) {
+        if (!controlador.signal.aborted) {
+          setErrorDatos(error.message);
+        }
+      }
+    }
+
+    cargarInicial();
+
+    return () => controlador.abort();
+  }, []);
+
+  // Cargar las mediciones de la parcela seleccionada.
+  useEffect(() => {
+    if (!parcelaId) return;
+
+    const controlador = new AbortController();
+
+    async function cargarSensores() {
+      setCargandoDatos(true);
+      setErrorDatos("");
+      setDatos(DATOS_VACIOS);
+
+      try {
+        const [lecturas, lluvia] = await Promise.all([
+          consultarAPI(
+            `/sensores/actual?parcela_id=${parcelaId}`,
+            controlador.signal
+          ),
+          consultarAPI(
+            `/lluvia?parcela_id=${parcelaId}`,
+            controlador.signal
+          ),
+        ]);
+
+        if (controlador.signal.aborted) return;
+
+        const estacion = lecturas.estacion ?? {};
+
+        const nodos = (lecturas.nodos ?? []).map((nodo, index) => ({
+          id: nodo.nodo_id,
+          nombre: nodo.identificador || `Nodo ${index + 1}`,
+          humedad: nodo.humedad_suelo ?? null,
+          temperatura: nodo.temp_suelo ?? null,
+          bateria: nodo.bateria_pct ?? null,
+          encendido: false,
+          estado: "Sin confirmar",
+        }));
+
+        const promedio = (campo) => {
+          const valores = nodos
+            .map((nodo) => nodo[campo])
+            .filter((valor) => Number.isFinite(valor));
+
+          if (valores.length === 0) return null;
+
+          const suma = valores.reduce(
+            (total, valor) => total + valor,
+            0
+          );
+
+          return Number((suma / valores.length).toFixed(2));
+        };
+
+        setDatos({
+          ...DATOS_VACIOS,
+
+          clima: {
+            temperatura: estacion.temp_ambiente ?? null,
+          },
+
+          nodos,
+
+          ambiente: {
+            humedad: estacion.humedad_ambiente ?? null,
+            temperatura: estacion.temp_ambiente ?? null,
+          },
+
+          suelo: {
+            humedadPromedio: promedio("humedad"),
+            temperaturaPromedio: promedio("temperatura"),
+          },
+
+          riego: {
+            tipo: "Manual",
+            dds: estacion.dds ?? null,
+            lluviaActual: lluvia.lectura_reciente
+              ? lluvia.lluvia_mm ?? null
+              : null,
+            lluviaAcumulada: lluvia.lluvia_acum_mm ?? null,
+          },
+
+          historial: DATOS_VACIOS.historial,
+        });
+      } catch (error) {
+        if (!controlador.signal.aborted) {
+          setErrorDatos(error.message);
+        }
+      } finally {
+        if (!controlador.signal.aborted) {
+          setCargandoDatos(false);
+        }
+      }
+    }
+
+    cargarSensores();
+
+    return () => controlador.abort();
+  }, [parcelaId]);
+
+
+
+// Consultar histórico cuando cambia la parcela seleccionada
+useEffect(() => {
+  const controlador = new AbortController();
+
+  setHistoricoNodos([]);
+  setErrorHistorico("");
+
+  if (!parcelaId) {
+    setCargandoHistorico(false);
+    return () => controlador.abort();
+  }
+
+  async function cargarHistorico() {
+    setCargandoHistorico(true);
+
+    try {
+      const fin = new Date();
+      const inicio = new Date(
+        fin.getTime() - 6 * 24 * 60 * 60 * 1000
+      );
+
+      const parametros = new URLSearchParams({
+        parcela_id: String(parcelaId),
+        inicio: inicio.toISOString(),
+        fin: fin.toISOString(),
+        intervalo: "raw",
+      });
+
+      const respuesta = await consultarAPI(
+        `/sensores/historico?${parametros.toString()}`,
+        controlador.signal
+      );
+
+      if (controlador.signal.aborted) return;
+
+      setHistoricoNodos(
+        Array.isArray(respuesta.nodos)
+          ? respuesta.nodos
+          : []
+      );
+    } catch (error) {
+      if (!controlador.signal.aborted) {
+        setErrorHistorico(error.message);
+      }
+    } finally {
+      if (!controlador.signal.aborted) {
+        setCargandoHistorico(false);
+      }
+    }
+  }
+
+  cargarHistorico();
+
+  return () => controlador.abort();
+}, [parcelaId]);
+
+
   
   // Estado que controla si la barra está abierta o cerrada (empieza en false)
   const [sidebarAbierta, setSidebarAbierta] = useState(false); 
@@ -117,8 +503,7 @@ export default function Dashboard({ usuario, onLogout }) {
 
   // NUEVO: Función para cerrar sesión
   const handleLogout = () => {
-    localStorage.removeItem("token");
-    window.location.href = "/login";
+    onLogout();
   };
 
   return (
@@ -196,21 +581,53 @@ export default function Dashboard({ usuario, onLogout }) {
                 <div style={styles.userMenuHeader}>
                   <div style={styles.userMenuAvatar}>👤</div>
                   <div style={styles.userMenuInfo}>
-                    <div style={styles.userMenuName}>JOSE BUZANI</div>
-                    <div style={styles.userMenuEmail}>Josebuzani06@gmail.com</div>
+                    <div style={styles.userMenuName}>
+                      {perfil?.nombre ?? usuario?.nombre ?? "Usuario"}
+                    </div>
+                    <div style={styles.userMenuEmail}>
+                      {perfil?.correo ?? usuario?.correo ?? ""}
+                    </div>
                   </div>
                 </div>
 
                 <div style={styles.userMenuOptions}>
-                  <div style={styles.userMenuOption} onClick={() => { navigate("/config-admin"); setMenuAbierto(false); }}>
-                    <span style={styles.userMenuBullet}>•</span> Gestión de usuarios
+                  {/* Gestión de usuarios: solo administradores */}
+                  {(perfil?.rol ?? usuario?.rol) === "admin" && (
+                    <div
+                      style={styles.userMenuOption}
+                      onClick={() => {
+                        navigate("/config-admin");
+                        setMenuAbierto(false);
+                      }}
+                    >
+                      <span style={styles.userMenuBullet}>•</span>
+                      Gestión de usuarios
+                    </div>
+                  )}
+
+                  {/* Cambiar cuenta */}
+                  <div
+                    style={styles.userMenuOption}
+                    onClick={() => {
+                      setMenuAbierto(false);
+                    }}
+                  >
+                    <span style={styles.userMenuBullet}>•</span>
+                    Cambiar cuenta
                   </div>
-                  <div style={styles.userMenuOption} onClick={() => { setMenuAbierto(false); }}>
-                    <span style={styles.userMenuBullet}>•</span> Cambiar cuenta
+
+                  {/* Gestión de cuenta */}
+                  <div
+                    style={styles.userMenuOption}
+                    onClick={() => {
+                      navigate("/config-cuenta");
+                      setMenuAbierto(false);
+                    }}
+                  >
+                    <span style={styles.userMenuBullet}>•</span>
+                    Gestión de cuenta
                   </div>
-                  <div style={styles.userMenuOption} onClick={() => { navigate("/config-cuenta"); setMenuAbierto(false); }}>
-                    <span style={styles.userMenuBullet}>•</span> Gestión de cuenta
-                  </div>
+
                 </div>
 
                 <div style={styles.userMenuLogout} onClick={handleLogout}>
@@ -233,10 +650,14 @@ export default function Dashboard({ usuario, onLogout }) {
           
           <div style={styles.mapIconBorder}>
             <span style={{ fontSize: 24 }}>🗺️</span>
-          </div>
+          </div>cd..
           
           <div style={{ display: "flex", flexDirection: "column" }}>
-             <h2 style={{ margin: 0, fontSize: 16 }}>Sonora Riego</h2>
+             <h2 style={{ margin: 0, fontSize: 16 }}>
+                {parcelas.find(
+                  (parcela) => Number(parcela.id) === Number(parcelaId)
+                )?.nombre ?? "Sin parcelas"}
+              </h2>
              <div style={styles.dots}>
                {[1, 2, 3, 4].map((d) => <span key={d} style={styles.dot} />)}
              </div>
@@ -292,8 +713,21 @@ export default function Dashboard({ usuario, onLogout }) {
 
           <div style={styles.bottomSection}>
             <div style={styles.chartCard}>
-              <h3 style={{ margin: "0 0 10px", fontSize: 16 }}>Humedad del suelo</h3>
-              <LineChart series={datos.historial} />
+              <h3 style={{ margin: "0 0 10px", fontSize: 16 }}>
+                Humedad del suelo
+              </h3>
+
+              {cargandoHistorico ? (
+                <p style={{ textAlign: "center", color: "#777" }}>
+                  Cargando mediciones históricas...
+                </p>
+              ) : errorHistorico ? (
+                <p style={{ textAlign: "center", color: "#d63b3b" }}>
+                  Error al cargar el histórico: {errorHistorico}
+                </p>
+              ) : (
+                <LineChart nodos={historicoNodos} />
+              )}
             </div>
 
             <div style={styles.statsCol}>
