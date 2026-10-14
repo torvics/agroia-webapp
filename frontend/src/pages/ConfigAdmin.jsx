@@ -1,12 +1,52 @@
-
 import { useEffect, useState } from "react";
 import { useNavigate, Link, useLocation } from "react-router-dom";
 import logoAgroIA from "../assets/agroia-logo.png";
 
 const API_URL = (
-  import.meta.env.VITE_API_URL || "http://localhost:5000/api"
+  import.meta.env.VITE_API_URL || "http://localhost:5001/api"
 ).replace(/\/api\/?$/, "");
-const DATOS_GENERALES = { clima: { temperatura: 36 } };
+// El reporte usa fechas locales del navegador; Flask recibe UTC con zona horaria.
+function fechaParaInput(fecha) {
+  const anio = fecha.getFullYear();
+  const mes = String(fecha.getMonth() + 1).padStart(2, "0");
+  const dia = String(fecha.getDate()).padStart(2, "0");
+  return `${anio}-${mes}-${dia}`;
+}
+
+function interpretarFechaLocal(texto) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(texto)) return null;
+  const [anio, mes, dia] = texto.split("-").map(Number);
+  const fecha = new Date(anio, mes - 1, dia);
+  if (
+    fecha.getFullYear() !== anio ||
+    fecha.getMonth() !== mes - 1 ||
+    fecha.getDate() !== dia
+  ) return null;
+  return fecha;
+}
+
+function obtenerRangoReporte(desde, hasta) {
+  const fechaDesde = interpretarFechaLocal(desde);
+  const fechaHasta = interpretarFechaLocal(hasta);
+  if (!fechaDesde || !fechaHasta) {
+    throw new Error("Selecciona fechas válidas para generar el reporte.");
+  }
+  if (fechaDesde > fechaHasta) {
+    throw new Error("La fecha inicial no puede ser posterior a la fecha final.");
+  }
+  // El backend trata 'fin' como exclusivo: se envía el inicio del día siguiente.
+  const finExclusivo = new Date(
+    fechaHasta.getFullYear(), fechaHasta.getMonth(), fechaHasta.getDate() + 1
+  );
+  // Se valida también la duración real, como hace Flask (incluye cambios de horario).
+  if (finExclusivo.getTime() - fechaDesde.getTime() > 366 * 86400000) {
+    throw new Error("El rango máximo del reporte es de 366 días.");
+  }
+  return {
+    inicio: fechaDesde.toISOString(),
+    fin: finExclusivo.toISOString(),
+  };
+}
 
 export default function ConfigAdmin() {
   const navigate = useNavigate();
@@ -21,6 +61,22 @@ export default function ConfigAdmin() {
   const [usuarios, setUsuarios] = useState([]);
   const [error, setError] = useState("");
   const [cargandoUsuarios, setCargandoUsuarios] = useState(true);
+
+  // Reportes: parcelas autorizadas, fechas y descarga autenticada.
+  const [parcelasReporte, setParcelasReporte] = useState([]);
+  const [parcelaReporte, setParcelaReporte] = useState("");
+  const [nodosRegistrados, setNodosRegistrados] = useState([]);
+  const [cargandoParcelas, setCargandoParcelas] = useState(true);
+  const [errorParcelas, setErrorParcelas] = useState("");
+  const [desde, setDesde] = useState(() => {
+    const fecha = new Date();
+    fecha.setDate(fecha.getDate() - 29);
+    return fechaParaInput(fecha);
+  });
+  const [hasta, setHasta] = useState(() => fechaParaInput(new Date()));
+  const [descargando, setDescargando] = useState("");
+  const [errorReporte, setErrorReporte] = useState("");
+  const [mensajeReporte, setMensajeReporte] = useState("");
 
   const nombreSesion = localStorage.getItem("nombre") || "Usuario";
   const rolSesion = localStorage.getItem("rol") || "Sesión activa";
@@ -96,6 +152,147 @@ export default function ConfigAdmin() {
       activo = false;
     };
   }, []);
+
+  // La carga de reportes es independiente de la consulta de usuarios.
+  useEffect(() => {
+    const controller = new AbortController();
+    const token =
+      localStorage.getItem("access_token") || localStorage.getItem("token");
+
+    if (!token) {
+      setErrorParcelas("No hay sesión activa. Inicia sesión nuevamente.");
+      setCargandoParcelas(false);
+      return () => controller.abort();
+    }
+
+    const consultar = async (ruta) => {
+      const respuesta = await fetch(`${API_URL}/api${ruta}`, {
+        headers: { Authorization: `Bearer ${token}` },
+        signal: controller.signal,
+      });
+      if (!respuesta.ok) {
+        const contenido = await respuesta.json().catch(() => ({}));
+        throw new Error(
+          contenido.error || contenido.msg || `Error HTTP ${respuesta.status}`
+        );
+      }
+      return respuesta.json();
+    };
+
+    const cargarParcelas = async () => {
+      try {
+        const datos = await consultar("/parcelas");
+        const lista = Array.isArray(datos) ? datos : datos.parcelas;
+        if (!Array.isArray(lista)) {
+          throw new Error("El servidor devolvió un formato de parcelas incorrecto.");
+        }
+        if (controller.signal.aborted) return;
+        setParcelasReporte(lista);
+        setParcelaReporte((anterior) =>
+          lista.some((p) => String(p.id) === anterior)
+            ? anterior
+            : lista.length ? String(lista[0].id) : ""
+        );
+        setErrorParcelas("");
+      } catch (e) {
+        if (!controller.signal.aborted) setErrorParcelas(e.message);
+      } finally {
+        if (!controller.signal.aborted) setCargandoParcelas(false);
+      }
+    };
+
+    const cargarNodos = async () => {
+      try {
+        const datos = await consultar("/nodos");
+        if (!controller.signal.aborted && Array.isArray(datos)) {
+          setNodosRegistrados(datos);
+        }
+      } catch {
+        // La navegación de nodos no impide generar reportes.
+        if (!controller.signal.aborted) setNodosRegistrados([]);
+      }
+    };
+
+    cargarParcelas();
+    cargarNodos();
+    return () => controller.abort();
+  }, []);
+
+  const nodosMenu = nodosRegistrados.filter(
+    (n) => n.tipo === "sensor_suelo" &&
+      String(n.parcela_id) === String(parcelaReporte)
+  );
+
+  const descargarReporte = async (formato) => {
+    if (descargando) return;
+    setErrorReporte("");
+    setMensajeReporte("");
+
+    if (!parcelaReporte) {
+      setErrorReporte("Selecciona una parcela para descargar el reporte.");
+      return;
+    }
+
+    let rango;
+    try {
+      rango = obtenerRangoReporte(desde, hasta);
+    } catch (e) {
+      setErrorReporte(e.message);
+      return;
+    }
+
+    const token =
+      localStorage.getItem("access_token") || localStorage.getItem("token");
+    if (!token) {
+      setErrorReporte("Tu sesión ha expirado. Inicia sesión nuevamente.");
+      return;
+    }
+
+    setDescargando(formato);
+    try {
+      const parametros = new URLSearchParams({ ...rango, formato });
+      const respuesta = await fetch(
+        `${API_URL}/api/reportes/${encodeURIComponent(parcelaReporte)}?${parametros}`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      if (!respuesta.ok) {
+        const contenido = await respuesta.json().catch(() => ({}));
+        throw new Error(
+          contenido.error || contenido.msg ||
+          `No se pudo descargar el reporte (HTTP ${respuesta.status}).`
+        );
+      }
+
+      const tipo = (respuesta.headers.get("Content-Type") || "").toLowerCase();
+      const tipoEsperado = formato === "pdf" ? "application/pdf" : "text/csv";
+      if (!tipo.includes(tipoEsperado)) {
+        throw new Error("El servidor no devolvió el formato de archivo esperado.");
+      }
+      const archivo = await respuesta.blob();
+      if (!archivo.size) throw new Error("El servidor devolvió un archivo vacío.");
+
+      const urlTemporal = URL.createObjectURL(archivo);
+      const enlace = document.createElement("a");
+      enlace.href = urlTemporal;
+      enlace.download =
+        `reporte_parcela_${parcelaReporte}_${desde}_${hasta}.${formato}`;
+      document.body.appendChild(enlace);
+      try {
+        enlace.click();
+      } finally {
+        enlace.remove();
+        // Tiempo suficiente para que el navegador inicie la descarga.
+        setTimeout(() => URL.revokeObjectURL(urlTemporal), 1500);
+      }
+      setMensajeReporte(
+        `Se preparó la descarga del reporte ${formato.toUpperCase()}.`
+      );
+    } catch (e) {
+      setErrorReporte(e.message || "No se pudo descargar el reporte.");
+    } finally {
+      setDescargando("");
+    }
+  };
 
   // ============================================
   // CERRAR SESIÓN Y REVOCAR JWT
@@ -195,17 +392,21 @@ export default function ConfigAdmin() {
 
           <div style={styles.sidebarSection}>
             <div style={styles.sidebarSectionTitle}>NODOS</div>
-            {[1, 2, 3, 4].map((numero) => (
+            {nodosMenu.length === 0 ? (
+              <span style={{ display: "block", padding: "10px 20px", color: "#777", fontSize: 13 }}>
+                Sin nodos de suelo en la parcela seleccionada.
+              </span>
+            ) : nodosMenu.map((nodo) => (
               <Link
-                key={numero}
-                to={`/nodo${numero}`}
+                key={nodo.id}
+                to={`/nodos/${nodo.id}`}
                 style={
-                  location.pathname === `/nodo${numero}`
+                  location.pathname === `/nodos/${nodo.id}`
                     ? styles.sidebarLinkActive
                     : styles.sidebarLink
                 }
               >
-                Nodo {numero}
+                {nodo.identificador || `Nodo ${nodo.id}`}
               </Link>
             ))}
           </div>
@@ -234,7 +435,7 @@ export default function ConfigAdmin() {
 
           <div style={styles.bannerRight}>
             <div style={styles.tempBadge}>
-              {DATOS_GENERALES.clima.temperatura} °C
+              Administración
             </div>
 
             <div style={styles.iconCircle}>🔔</div>
@@ -402,38 +603,112 @@ export default function ConfigAdmin() {
             </p>
           </div>
 
-          {/* REPORTES */}
+          {/* REPORTES REALES POR PARCELA */}
           <div style={styles.card}>
-            <h2 style={styles.cardTitle}>Reportes de ciclos</h2>
+            <h2 style={styles.cardTitle}>Reportes por parcela</h2>
             <p style={styles.cardSubtitle}>
-              Consulta y descarga reportes de los ciclos de riego.
+              Descarga reportes PDF y CSV generados por Flask con datos
+              de la parcela y el período seleccionados.
             </p>
 
             <div style={styles.reportesFlex}>
-              <select style={styles.selectInput} disabled>
-                <option>Seleccionar ciclo de riego</option>
-              </select>
+              <label style={styles.campoReporte}>
+                Parcela
+                <select
+                  style={styles.selectInput}
+                  value={parcelaReporte}
+                  disabled={cargandoParcelas || Boolean(descargando)}
+                  onChange={(e) => {
+                    setParcelaReporte(e.target.value);
+                    setErrorReporte("");
+                    setMensajeReporte("");
+                  }}
+                >
+                  {!parcelasReporte.length && (
+                    <option value="">Sin parcelas disponibles</option>
+                  )}
+                  {parcelasReporte.map((parcela) => (
+                    <option key={parcela.id} value={String(parcela.id)}>
+                      {parcela.nombre || `Parcela ${parcela.id}`}
+                    </option>
+                  ))}
+                </select>
+              </label>
 
+              <label style={styles.campoReporte}>
+                Desde
+                <input
+                  type="date"
+                  style={styles.fechaInput}
+                  value={desde}
+                  max={hasta}
+                  disabled={Boolean(descargando)}
+                  onChange={(e) => {
+                    setDesde(e.target.value);
+                    setErrorReporte("");
+                    setMensajeReporte("");
+                  }}
+                />
+              </label>
+
+              <label style={styles.campoReporte}>
+                Hasta (incluido)
+                <input
+                  type="date"
+                  style={styles.fechaInput}
+                  value={hasta}
+                  min={desde}
+                  disabled={Boolean(descargando)}
+                  onChange={(e) => {
+                    setHasta(e.target.value);
+                    setErrorReporte("");
+                    setMensajeReporte("");
+                  }}
+                />
+              </label>
+            </div>
+
+            <div style={{ ...styles.reportesFlex, marginTop: 15 }}>
               <button
                 type="button"
-                style={styles.btnDeshabilitado}
-                disabled
+                style={{
+                  ...styles.btnReporte,
+                  opacity: descargando || cargandoParcelas || !parcelaReporte ? 0.55 : 1,
+                }}
+                disabled={Boolean(descargando) || cargandoParcelas || !parcelaReporte}
+                onClick={() => descargarReporte("pdf")}
               >
-                Descargar PDF
+                {descargando === "pdf" ? "Generando PDF..." : "📄 Descargar PDF"}
               </button>
-
               <button
                 type="button"
-                style={styles.btnDeshabilitado}
-                disabled
+                style={{
+                  ...styles.btnReporte,
+                  opacity: descargando || cargandoParcelas || !parcelaReporte ? 0.55 : 1,
+                }}
+                disabled={Boolean(descargando) || cargandoParcelas || !parcelaReporte}
+                onClick={() => descargarReporte("csv")}
               >
-                Descargar CSV
+                {descargando === "csv" ? "Generando CSV..." : "📊 Descargar CSV"}
               </button>
             </div>
 
+            {errorParcelas && (
+              <p role="alert" style={styles.errorBox}>
+                No fue posible cargar las parcelas: {errorParcelas}
+              </p>
+            )}
+            {errorReporte && (
+              <p role="alert" style={styles.errorBox}>{errorReporte}</p>
+            )}
+            {mensajeReporte && (
+              <p role="status" style={styles.exitoReporte}>{mensajeReporte}</p>
+            )}
+
             <p style={styles.nota}>
-              Los reportes se conectarán aquí con el módulo
-              de reportes del backend.
+              Se incluyen ambos días seleccionados según la zona horaria del navegador.
+              El rango máximo es de 366 días. Estos son reportes de parcela;
+              no son un registro de actuación física verificada del ESP32.
             </p>
           </div>
 
@@ -751,6 +1026,42 @@ const styles = {
     borderRadius: 6,
     border: "1px solid #ccc",
     minWidth: 280,
+  },
+
+  campoReporte: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 6,
+    color: "#555",
+    fontWeight: 600,
+    fontSize: 13,
+  },
+
+  fechaInput: {
+    padding: "10px 12px",
+    borderRadius: 6,
+    border: "1px solid #ccc",
+    background: "#fff",
+    color: "#333",
+    fontSize: 14,
+  },
+
+  btnReporte: {
+    background: "#355e2b",
+    color: "#fff",
+    border: "none",
+    padding: "11px 17px",
+    borderRadius: 6,
+    cursor: "pointer",
+    fontWeight: "bold",
+    fontSize: 14,
+  },
+
+  exitoReporte: {
+    marginTop: 15,
+    color: "#2F5413",
+    fontWeight: "bold",
+    fontSize: 13,
   },
 
   btnDeshabilitado: {
