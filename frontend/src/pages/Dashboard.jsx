@@ -1,11 +1,9 @@
 import { useState, useEffect } from "react";
 import { useNavigate, Link, useLocation } from "react-router-dom";
-import logoAgroIA from "../assets/agroia-logo.png"; 
-
+import logoAgroIA from "../assets/agroia-logo.png";
 const API_URL = (
   import.meta.env.VITE_API_URL || "http://localhost:5000/api"
 ).replace(/\/api\/?$/, "");
-
 const DATOS_VACIOS = {
   clima: { temperatura: null },
   nodos: [],
@@ -18,7 +16,7 @@ const DATOS_VACIOS = {
     temperaturaPromedio: null,
   },
   riego: {
-    tipo: "Manual",
+    tipo: null,
     dds: null,
     lluviaActual: null,
     lluviaAcumulada: null,
@@ -29,32 +27,26 @@ const DATOS_VACIOS = {
     verde: [],
   },
 };
-
 async function consultarAPI(ruta, signal) {
   const token =
     localStorage.getItem("access_token") ||
     localStorage.getItem("token");
-
   if (!token) {
     throw new Error("No hay una sesión activa.");
   }
-
   const respuesta = await fetch(`${API_URL}/api${ruta}`, {
     headers: {
       Authorization: `Bearer ${token}`,
     },
     signal,
   });
-
   if (!respuesta.ok) {
     throw new Error(
       `Error HTTP ${respuesta.status} al consultar ${ruta}`
     );
   }
-
   return respuesta.json();
 }
-
 function Gauge({ label, value, max = 100, unit = "%", color = "#3fb6b6" }) {
   const disponible = typeof value === "number" && Number.isFinite(value);
   const pct = disponible
@@ -82,8 +74,6 @@ function Gauge({ label, value, max = 100, unit = "%", color = "#3fb6b6" }) {
     </div>
   );
 }
-
-
 function LineChart({ nodos = [] }) {
   const colores = [
     "#8a5cd6",
@@ -92,11 +82,9 @@ function LineChart({ nodos = [] }) {
     "#a3c93f",
     "#e05252",
   ];
-
   const ancho = 620;
   const alto = 230;
   const margen = { izquierda: 45, derecha: 15, arriba: 15, abajo: 42 };
-
   const series = nodos
     .map((nodo, indice) => ({
       nombre: nodo.identificador || `Nodo ${nodo.nodo_id}`,
@@ -117,7 +105,6 @@ function LineChart({ nodos = [] }) {
         .sort((a, b) => a.fecha - b.fecha),
     }))
     .filter((serie) => serie.puntos.length > 0);
-
   if (series.length === 0) {
     return (
       <p style={{ color: "#777", textAlign: "center" }}>
@@ -125,26 +112,20 @@ function LineChart({ nodos = [] }) {
       </p>
     );
   }
-
   const fechas = series.flatMap((serie) =>
     serie.puntos.map((punto) => punto.fecha)
   );
-
   const fechaMin = Math.min(...fechas);
   const fechaMax = Math.max(...fechas);
-
   const areaAncho = ancho - margen.izquierda - margen.derecha;
   const areaAlto = alto - margen.arriba - margen.abajo;
-
   const posicionX = (fecha) =>
     fechaMax === fechaMin
       ? margen.izquierda + areaAncho / 2
       : margen.izquierda +
         ((fecha - fechaMin) / (fechaMax - fechaMin)) * areaAncho;
-
   const posicionY = (humedad) =>
     margen.arriba + ((100 - humedad) / 100) * areaAlto;
-
   const formatoFecha = (fecha) =>
     new Date(fecha).toLocaleString("es-MX", {
       day: "2-digit",
@@ -152,7 +133,6 @@ function LineChart({ nodos = [] }) {
       hour: "2-digit",
       minute: "2-digit",
     });
-
   return (
     <div>
       <svg
@@ -180,7 +160,6 @@ function LineChart({ nodos = [] }) {
             </text>
           </g>
         ))}
-
         {series.map((serie) => (
           <g key={serie.nombre}>
             {serie.puntos.length > 1 && (
@@ -197,7 +176,6 @@ function LineChart({ nodos = [] }) {
                 strokeLinejoin="round"
               />
             )}
-
             {serie.puntos.map((punto, indice) => (
               <circle
                 key={`${punto.fecha}-${indice}`}
@@ -213,7 +191,6 @@ function LineChart({ nodos = [] }) {
             ))}
           </g>
         ))}
-
         <text
           x={margen.izquierda}
           y={alto - 10}
@@ -222,7 +199,6 @@ function LineChart({ nodos = [] }) {
         >
           {formatoFecha(fechaMin)}
         </text>
-
         {fechaMax !== fechaMin && (
           <text
             x={ancho - margen.derecha}
@@ -235,7 +211,6 @@ function LineChart({ nodos = [] }) {
           </text>
         )}
       </svg>
-
       <div style={{ display: "flex", gap: 15, flexWrap: "wrap" }}>
         {series.map((serie) => (
           <span key={serie.nombre} style={{ fontSize: 12 }}>
@@ -249,45 +224,90 @@ function LineChart({ nodos = [] }) {
     </div>
   );
 }
-
-
-// CAMBIO: Se agregó la prop "deshabilitado" para bloquear el toggle
-function NodoToggle({ nombre, encendido, onChange, deshabilitado }) {
+// Indicador visual inactivo: no afirma el estado real de la válvula o bomba.
+function NodoToggle({ nombre }) {
   return (
-    <div style={{ ...styles.nodoToggle, opacity: deshabilitado ? 0.5 : 1 }}>
+    <div
+      style={{ ...styles.nodoToggle, opacity: 0.55 }}
+      title="Control de riego deshabilitado hasta validar el ESP32"
+    >
       <span>{nombre}</span>
-      <div 
-        onClick={deshabilitado ? null : onChange} 
-        style={{ 
-          ...styles.switch, 
-          background: deshabilitado ? "#e0e0e0" : (encendido ? "#2f7bd6" : "#ccc"),
-          cursor: deshabilitado ? "not-allowed" : "pointer"
-        }}
+      <div
+        aria-hidden="true"
+        style={{ ...styles.switch, background: "#e0e0e0", cursor: "not-allowed" }}
       >
-        <div style={{ ...styles.switchKnob, left: encendido ? 20 : 2 }} />
+        <div style={{ ...styles.switchKnob, left: 2 }} />
       </div>
     </div>
   );
 }
-
-
 export default function Dashboard({ usuario, onLogout }) {
   const [datos, setDatos] = useState(DATOS_VACIOS);
-
   const [perfil, setPerfil] = useState(usuario ?? null);
   const [parcelas, setParcelas] = useState([]);
   const [parcelaId, setParcelaId] = useState(null);
+  // Nodos registrados en MySQL
+  const [nodosRegistrados, setNodosRegistrados] = useState([]);
+  const [cargandoNodos, setCargandoNodos] = useState(true);
+  const [errorNodos, setErrorNodos] = useState("");
   const [cargandoDatos, setCargandoDatos] = useState(false);
   const [errorDatos, setErrorDatos] = useState("");
   // Estados del histórico de humedad del suelo
   const [historicoNodos, setHistoricoNodos] = useState([]);
   const [cargandoHistorico, setCargandoHistorico] = useState(false);
   const [errorHistorico, setErrorHistorico] = useState("");
-
+  useEffect(() => {
+    const controlador = new AbortController();
+    const cargarNodosRegistrados = async () => {
+      setCargandoNodos(true);
+      setErrorNodos("");
+      const token =
+        localStorage.getItem("access_token") ||
+        localStorage.getItem("token");
+      if (!token) {
+        setErrorNodos("No hay una sesión activa.");
+        setCargandoNodos(false);
+        return;
+      }
+      try {
+        const respuesta = await fetch(`${API_URL}/api/nodos`, {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+          signal: controlador.signal,
+        });
+        const resultado = await respuesta.json().catch(() => ({}));
+        if (!respuesta.ok) {
+          throw new Error(
+            resultado.error ||
+            resultado.msg ||
+            `Error HTTP ${respuesta.status}`
+          );
+        }
+        if (!Array.isArray(resultado)) {
+          throw new Error("El servidor devolvió una lista de nodos no válida.");
+        }
+        if (!controlador.signal.aborted) {
+          setNodosRegistrados(resultado);
+        }
+      } catch (error) {
+        if (!controlador.signal.aborted) {
+          setErrorNodos(error.message);
+          setNodosRegistrados([]);
+        }
+      } finally {
+        if (!controlador.signal.aborted) {
+          setCargandoNodos(false);
+        }
+      }
+    };
+    cargarNodosRegistrados();
+    return () => controlador.abort();
+  }, []);
   // Cargar el perfil y las parcelas al entrar al dashboard.
   useEffect(() => {
     const controlador = new AbortController();
-
     async function cargarInicial() {
       try {
         const [respuestaPerfil, respuestaParcelas] =
@@ -295,15 +315,11 @@ export default function Dashboard({ usuario, onLogout }) {
             consultarAPI("/auth/perfil", controlador.signal),
             consultarAPI("/parcelas", controlador.signal),
           ]);
-
         if (controlador.signal.aborted) return;
-
         setPerfil(respuestaPerfil.usuario ?? respuestaPerfil);
-
         const lista = Array.isArray(respuestaParcelas)
           ? respuestaParcelas
           : respuestaParcelas.parcelas ?? [];
-
         setParcelas(lista);
         setParcelaId(lista.length > 0 ? lista[0].id : null);
       } catch (error) {
@@ -312,23 +328,17 @@ export default function Dashboard({ usuario, onLogout }) {
         }
       }
     }
-
     cargarInicial();
-
     return () => controlador.abort();
   }, []);
-
   // Cargar las mediciones de la parcela seleccionada.
   useEffect(() => {
     if (!parcelaId) return;
-
     const controlador = new AbortController();
-
     async function cargarSensores() {
       setCargandoDatos(true);
       setErrorDatos("");
       setDatos(DATOS_VACIOS);
-
       try {
         const [lecturas, lluvia] = await Promise.all([
           consultarAPI(
@@ -340,64 +350,49 @@ export default function Dashboard({ usuario, onLogout }) {
             controlador.signal
           ),
         ]);
-
         if (controlador.signal.aborted) return;
-
         const estacion = lecturas.estacion ?? {};
-
         const nodos = (lecturas.nodos ?? []).map((nodo, index) => ({
           id: nodo.nodo_id,
           nombre: nodo.identificador || `Nodo ${index + 1}`,
           humedad: nodo.humedad_suelo ?? null,
           temperatura: nodo.temp_suelo ?? null,
           bateria: nodo.bateria_pct ?? null,
-          encendido: false,
           estado: "Sin confirmar",
         }));
-
         const promedio = (campo) => {
           const valores = nodos
             .map((nodo) => nodo[campo])
             .filter((valor) => Number.isFinite(valor));
-
           if (valores.length === 0) return null;
-
           const suma = valores.reduce(
             (total, valor) => total + valor,
             0
           );
-
           return Number((suma / valores.length).toFixed(2));
         };
-
         setDatos({
           ...DATOS_VACIOS,
-
           clima: {
             temperatura: estacion.temp_ambiente ?? null,
           },
-
           nodos,
-
           ambiente: {
             humedad: estacion.humedad_ambiente ?? null,
             temperatura: estacion.temp_ambiente ?? null,
           },
-
           suelo: {
             humedadPromedio: promedio("humedad"),
             temperaturaPromedio: promedio("temperatura"),
           },
-
           riego: {
-            tipo: "Manual",
+            tipo: null,
             dds: estacion.dds ?? null,
             lluviaActual: lluvia.lectura_reciente
               ? lluvia.lluvia_mm ?? null
               : null,
             lluviaAcumulada: lluvia.lluvia_acum_mm ?? null,
           },
-
           historial: DATOS_VACIOS.historial,
         });
       } catch (error) {
@@ -410,49 +405,36 @@ export default function Dashboard({ usuario, onLogout }) {
         }
       }
     }
-
     cargarSensores();
-
     return () => controlador.abort();
   }, [parcelaId]);
-
-
-
 // Consultar histórico cuando cambia la parcela seleccionada
 useEffect(() => {
   const controlador = new AbortController();
-
   setHistoricoNodos([]);
   setErrorHistorico("");
-
   if (!parcelaId) {
     setCargandoHistorico(false);
     return () => controlador.abort();
   }
-
   async function cargarHistorico() {
     setCargandoHistorico(true);
-
     try {
       const fin = new Date();
       const inicio = new Date(
         fin.getTime() - 6 * 24 * 60 * 60 * 1000
       );
-
       const parametros = new URLSearchParams({
         parcela_id: String(parcelaId),
         inicio: inicio.toISOString(),
         fin: fin.toISOString(),
         intervalo: "raw",
       });
-
       const respuesta = await consultarAPI(
         `/sensores/historico?${parametros.toString()}`,
         controlador.signal
       );
-
       if (controlador.signal.aborted) return;
-
       setHistoricoNodos(
         Array.isArray(respuesta.nodos)
           ? respuesta.nodos
@@ -468,47 +450,32 @@ useEffect(() => {
       }
     }
   }
-
   cargarHistorico();
-
   return () => controlador.abort();
 }, [parcelaId]);
-
-
-  
   // Estado que controla si la barra está abierta o cerrada (empieza en false)
-  const [sidebarAbierta, setSidebarAbierta] = useState(false); 
-  
+  const [sidebarAbierta, setSidebarAbierta] = useState(false);
   // Estado para el menú de usuario
   const [menuAbierto, setMenuAbierto] = useState(false);
-  
-  // NUEVO: Estado para el tipo de riego (Manual, Automático, Inteligente)
-  const [tipoRiego, setTipoRiego] = useState(datos.riego.tipo);
-  
   const navigate = useNavigate();
   const location = useLocation();
 
-  // NUEVO: Determina si los toggles de nodos deben estar deshabilitados
-  const togglesDeshabilitados = tipoRiego === "Automático" || tipoRiego === "Inteligente";
+  // Enlaces desde MySQL de los sensores de suelo de la parcela seleccionada.
+  // GET /api/nodos respeta los permisos del usuario en Flask.
+  const nodosParcela = nodosRegistrados.filter(
+    (nodo) =>
+      parcelaId !== null &&
+      parcelaId !== undefined &&
+      Number(nodo.parcela_id) === Number(parcelaId) &&
+      nodo.tipo !== "estacion"
+  );
 
-  const toggleNodo = (id) => {
-    // Si los toggles están deshabilitados, no hacer nada
-    if (togglesDeshabilitados) return;
-    
-    setDatos((prev) => ({
-      ...prev,
-      nodos: prev.nodos.map((n) => n.id === id ? { ...n, encendido: !n.encendido } : n),
-    }));
-  };
-
-  // NUEVO: Función para cerrar sesión
   const handleLogout = () => {
     onLogout();
   };
 
   return (
     <div style={styles.app}>
-      
       {/* Estilos de impresión: ocultan todo menos el reporte */}
       <style>{`
         @media print {
@@ -516,7 +483,6 @@ useEffect(() => {
           .no-imprimir { display: none !important; }
         }
       `}</style>
-
       {/* SIDEBAR DESPLEGABLE CON NUEVO DISEÑO */}
       <aside className="no-imprimir" style={{
         ...styles.sidebar,
@@ -531,21 +497,41 @@ useEffect(() => {
             <span style={{ fontSize: 24, cursor: "pointer", color: "#333", marginRight: 15 }} onClick={() => setSidebarAbierta(false)}>←</span>
             <h2 style={{ margin: 0, fontSize: 20 }}>Menú</h2>
           </div>
-          
           <div style={styles.sidebarSection}>
             <div style={styles.sidebarSectionTitle}>PRINCIPAL</div>
             <Link to="/dashboard" style={location.pathname === "/dashboard" ? styles.sidebarLinkActive : styles.sidebarLink}>Vista general</Link>
             <Link to="/Bitacoras" style={location.pathname === "/Bitacoras" ? styles.sidebarLinkActive : styles.sidebarLink}>Bitácoras</Link>
           </div>
-
           <div style={styles.sidebarSection}>
             <div style={styles.sidebarSectionTitle}>NODOS</div>
-            <Link to="/nodo1" style={location.pathname === "/nodo1" ? styles.sidebarLinkActive : styles.sidebarLink}>Nodo 1</Link>
-            <Link to="/nodo2" style={location.pathname === "/nodo2" ? styles.sidebarLinkActive : styles.sidebarLink}>Nodo 2</Link>
-            <Link to="/nodo3" style={location.pathname === "/nodo3" ? styles.sidebarLinkActive : styles.sidebarLink}>Nodo 3</Link>
-            <Link to="/nodo4" style={location.pathname === "/nodo4" ? styles.sidebarLinkActive : styles.sidebarLink}>Nodo 4</Link>
+            {cargandoNodos ? (
+              <span style={{ padding: "10px 20px", color: "#777", fontSize: 13 }}>
+                Cargando nodos...
+              </span>
+            ) : errorNodos ? (
+              <span style={{ padding: "10px 20px", color: "#b42318", fontSize: 12, whiteSpace: "normal" }}>
+                {errorNodos}
+              </span>
+            ) : nodosParcela.length === 0 ? (
+              <span style={{ padding: "10px 20px", color: "#777", fontSize: 13, whiteSpace: "normal" }}>
+                No hay nodos de suelo registrados en esta parcela.
+              </span>
+            ) : (
+              nodosParcela.map((nodo) => (
+                <Link
+                  key={nodo.id}
+                  to={`/nodos/${nodo.id}`}
+                  style={
+                    location.pathname === `/nodos/${nodo.id}`
+                      ? styles.sidebarLinkActive
+                      : styles.sidebarLink
+                  }
+                >
+                  {nodo.identificador || `Nodo ${nodo.id}`}
+                </Link>
+              ))
+            )}
           </div>
-          
           <div style={styles.sidebarFooter}>
             <Link to="/config-general" style={styles.sidebarLinkConfig}>
               <span>⚙️️</span> Configuración
@@ -553,29 +539,27 @@ useEffect(() => {
           </div>
         </div>
       </aside>
-
       {/* CONTENIDO PRINCIPAL */}
       <div style={styles.mainContent}>
         <header className="no-imprimir" style={styles.banner}>
           <Link to="/dashboard" style={{ textDecoration: "none", display: "flex", alignItems: "center" }}>
-            <img 
-              src={logoAgroIA} 
-              alt="Agro IA - Riego Inteligente" 
-              style={{ height: 60, cursor: "pointer" }} 
+            <img
+              src={logoAgroIA}
+              alt="Agro IA - Riego Inteligente"
+              style={{ height: 60, cursor: "pointer" }}
              />
           </Link>
-          
           <div style={styles.bannerRight}>
-            <div style={styles.tempBadge}>{datos.clima.temperatura} °C</div>
+            <div style={styles.tempBadge}>
+              {datos.clima.temperatura ?? "—"} °C
+            </div>
             <div style={styles.iconCircle}>🔔</div>
-            
-            <div 
+            <div
               style={{ ...styles.iconCircle, cursor: "pointer" }}
               onClick={() => setMenuAbierto(!menuAbierto)}
             >
               👤
             </div>
-
             {menuAbierto && (
               <div style={styles.userMenu}>
                 <div style={styles.userMenuHeader}>
@@ -589,7 +573,6 @@ useEffect(() => {
                     </div>
                   </div>
                 </div>
-
                 <div style={styles.userMenuOptions}>
                   {/* Gestión de usuarios: solo administradores */}
                   {(perfil?.rol ?? usuario?.rol) === "admin" && (
@@ -604,18 +587,6 @@ useEffect(() => {
                       Gestión de usuarios
                     </div>
                   )}
-
-                  {/* Cambiar cuenta */}
-                  <div
-                    style={styles.userMenuOption}
-                    onClick={() => {
-                      setMenuAbierto(false);
-                    }}
-                  >
-                    <span style={styles.userMenuBullet}>•</span>
-                    Cambiar cuenta
-                  </div>
-
                   {/* Gestión de cuenta */}
                   <div
                     style={styles.userMenuOption}
@@ -627,9 +598,7 @@ useEffect(() => {
                     <span style={styles.userMenuBullet}>•</span>
                     Gestión de cuenta
                   </div>
-
                 </div>
-
                 <div style={styles.userMenuLogout} onClick={handleLogout}>
                   <span style={{ marginRight: 8 }}>🚪</span> Cerrar sesión
                 </div>
@@ -637,86 +606,77 @@ useEffect(() => {
             )}
           </div>
         </header>
-
         <div className="no-imprimir" style={styles.toolbar}>
           {!sidebarAbierta && (
-            <span 
-              style={{ fontSize: 24, cursor: "pointer", marginRight: 10 }} 
+            <span
+              style={{ fontSize: 24, cursor: "pointer", marginRight: 10 }}
               onClick={() => setSidebarAbierta(true)}
             >
               ☰
             </span>
           )}
-          
           <div style={styles.mapIconBorder}>
             <span style={{ fontSize: 24 }}>🗺️</span>
-          </div>cd..
-          
+          </div>
           <div style={{ display: "flex", flexDirection: "column" }}>
-             <h2 style={{ margin: 0, fontSize: 16 }}>
-                {parcelas.find(
-                  (parcela) => Number(parcela.id) === Number(parcelaId)
-                )?.nombre ?? "Sin parcelas"}
-              </h2>
+              {parcelas.length > 1 ? (
+                <select
+                  value={parcelaId ?? ""}
+                  onChange={(e) => setParcelaId(Number(e.target.value))}
+                  aria-label="Seleccionar parcela"
+                  style={{ fontSize: 16, fontWeight: 600, border: "1px solid #ccc", borderRadius: 6, padding: 4, maxWidth: 240 }}
+                >
+                  {parcelas.map((parcela) => (
+                    <option key={parcela.id} value={parcela.id}>
+                      {parcela.nombre}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <h2 style={{ margin: 0, fontSize: 16 }}>
+                  {parcelas[0]?.nombre ?? "Sin parcelas"}
+                </h2>
+              )}
              <div style={styles.dots}>
                {[1, 2, 3, 4].map((d) => <span key={d} style={styles.dot} />)}
              </div>
           </div>
-
           <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 15 }}>
             <div style={styles.selectGroupContainer}>
               <span style={{ fontSize: 10, color: "#777", marginBottom: 2 }}>Tipo de Riego</span>
-              {/* CAMBIO: Se agregó value y onChange para controlar el estado */}
-              <select 
-                style={styles.select} 
-                value={tipoRiego} 
-                onChange={(e) => setTipoRiego(e.target.value)}
-              >
-                <option>Manual</option>
-                <option>Automático</option>
-                <option>Inteligente</option>
+              <select style={styles.select} value="No configurado" disabled aria-label="Tipo de riego no configurado">
+                <option value="No configurado">No configurado</option>
               </select>
             </div>
-            
-            {datos.nodos.map((n) => (
-              <NodoToggle 
-                key={n.id} 
-                nombre={n.nombre} 
-                encendido={n.encendido} 
-                onChange={() => toggleNodo(n.id)} 
-                deshabilitado={togglesDeshabilitados} // CAMBIO: se pasa la prop
+            {nodosParcela.map((nodo) => (
+              <NodoToggle
+                key={nodo.id}
+                nombre={nodo.identificador || `Nodo ${nodo.id}`}
               />
             ))}
-            
             <button onClick={handleLogout} style={styles.logoutBtn}>Salir</button>
           </div>
         </div>
-
         <main style={styles.main}>
           <h2 style={styles.sectionTitle}>Vista general</h2>
-
           <div style={styles.gaugeGrid}>
             {datos.nodos.map((n) => <Gauge key={n.id} label={`${n.nombre} Humedad`} value={n.humedad} color="#8a5cd6" />)}
             <Gauge label="Humedad Ambiente" value={datos.ambiente.humedad} color="#3fb6b6" />
             <Gauge label="Temp Ambiente" value={datos.ambiente.temperatura} unit="°C" color="#bbbbbb" />
           </div>
-
           <div style={styles.gaugeGrid}>
             {datos.nodos.map((n) => <Gauge key={n.id} label={`${n.nombre} Temperatura`} value={n.temperatura} unit="°C" color="#a3c93f" />)}
             <Gauge label="Humedad Suelo Prom." value={datos.suelo.humedadPromedio} color="#d63b3b" />
             <Gauge label="Temp Suelo Prom." value={datos.suelo.temperaturaPromedio} unit="°C" color="#bbbbbb" />
           </div>
-
           <div style={styles.gaugeGrid}>
             {datos.nodos.map((n) => <Gauge key={n.id} label={`${n.nombre} Batería`} value={n.bateria} color="#2f7bd6" />)}
           </div>
-
           <div style={styles.bottomSection}>
             <div style={styles.chartCard}>
               <h3 style={{ margin: "0 0 10px", fontSize: 16 }}>
                 Humedad del suelo
               </h3>
-
               {cargandoHistorico ? (
                 <p style={{ textAlign: "center", color: "#777" }}>
                   Cargando mediciones históricas...
@@ -729,22 +689,24 @@ useEffect(() => {
                 <LineChart nodos={historicoNodos} />
               )}
             </div>
-
             <div style={styles.statsCol}>
               <div style={{ ...styles.statBox, border: "2px solid #2f7bd6" }}>
                 <div style={styles.statLabel}>DDS</div>
-                <div style={styles.statValue}>{datos.riego.dds}</div>
+                <div style={styles.statValue}>{datos.riego.dds ?? "—"}</div>
               </div>
               <div style={styles.statBox}>
                 <div style={styles.statLabel}>Lluvia actual</div>
-                <div style={styles.statValue}>{datos.riego.lluviaActual} mm</div>
+                <div style={styles.statValue}>
+                    {datos.riego.lluviaActual == null ? "—" : `${datos.riego.lluviaActual} mm`}
+                  </div>
               </div>
               <div style={styles.statBox}>
                 <div style={styles.statLabel}>Lluvia acumulada</div>
-                <div style={styles.statValue}>{datos.riego.lluviaAcumulada} mm</div>
+                <div style={styles.statValue}>
+                    {datos.riego.lluviaAcumulada == null ? "—" : `${datos.riego.lluviaAcumulada} mm`}
+                  </div>
               </div>
             </div>
-
             <div style={styles.statsCol}>
               {datos.nodos.map((n) => (
                 <div key={n.id} style={styles.nodeStatus}>
@@ -759,26 +721,24 @@ useEffect(() => {
     </div>
   );
 }
-
 const styles = {
-  app: { 
-    display: "flex", 
-    maxWidth: "100%", 
-    minHeight: "100vh", 
-    margin: 0, 
-    background: "#fdfdfd", 
-    fontFamily: "sans-serif" 
+  app: {
+    display: "flex",
+    maxWidth: "100%",
+    minHeight: "100vh",
+    margin: 0,
+    background: "#fdfdfd",
+    fontFamily: "sans-serif"
   },
-  
-  sidebar: { 
-    backgroundColor: "#f4f6f8", 
-    display: "flex", 
-    flexDirection: "column", 
-    boxSizing: "border-box", 
-    transition: "width 0.3s ease, min-width 0.3s ease, opacity 0.3s ease", 
-    overflow: "hidden", 
-    whiteSpace: "nowrap", 
-    zIndex: 10 
+  sidebar: {
+    backgroundColor: "#f4f6f8",
+    display: "flex",
+    flexDirection: "column",
+    boxSizing: "border-box",
+    transition: "width 0.3s ease, min-width 0.3s ease, opacity 0.3s ease",
+    overflow: "hidden",
+    whiteSpace: "nowrap",
+    zIndex: 10
   },
   sidebarHeader: { display: "flex", alignItems: "center", padding: "20px 20px", borderBottom: "1px solid #e0e0e0", marginBottom: "20px", color: "#333" },
   sidebarSection: { marginBottom: "25px", display: "flex", flexDirection: "column" },
@@ -787,24 +747,20 @@ const styles = {
   sidebarLinkActive: { display: "block", padding: "12px 20px", textDecoration: "none", fontSize: "15px", fontWeight: "600", backgroundColor: "#e6f4cd", color: "#5a7d3c", borderLeft: "4px solid #7A9D54" },
   sidebarFooter: { marginTop: "auto", padding: "20px 0", borderTop: "1px solid #e0e0e0" },
   sidebarLinkConfig: { display: "flex", alignItems: "center", gap: "10px", padding: "12px 20px", color: "#444", textDecoration: "none", fontSize: "15px", fontWeight: "600" },
-
-  mainContent: { 
-    flex: 1, 
-    display: "flex", 
-    flexDirection: "column", 
+  mainContent: {
+    flex: 1,
+    display: "flex",
+    flexDirection: "column",
     overflowY: "auto",
-    minWidth: 0 
+    minWidth: 0
   },
   banner: {background: "#7A9D54", color: "#fff", display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 24px"},
   brand: { display: "flex", alignItems: "center", gap: 10 },
   brandTitle: { margin: 0, fontSize: 24, lineHeight: 1, fontWeight: 900, textShadow: "1px 1px 2px rgba(0,0,0,0.3)" },
   brandSubtitle: { display: "block", fontSize: 10, letterSpacing: 1, opacity: 0.9 },
-  
   bannerRight: { display: "flex", alignItems: "center", gap: 14, position: "relative" },
-  
   tempBadge: { background: "rgba(0,0,0,0.3)", padding: "6px 14px", borderRadius: 20, fontWeight: 600 },
   iconCircle: { width: 38, height: 38, borderRadius: "50%", background: "rgba(0,0,0,0.3)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18 },
-  
   userMenu: {
     position: "absolute",
     top: 65,
@@ -878,7 +834,6 @@ const styles = {
     paddingTop: 12,
     fontWeight: "bold",
   },
-  
   toolbar: { display: "flex", alignItems: "center", gap: 15, padding: "14px 24px", borderBottom: "1px solid #eee", background: "#fff", flexWrap: "wrap" },
   mapIconBorder: { border: "2px solid #ccc", borderRadius: 12, padding: "4px 8px" },
   dots: { display: "flex", gap: 6, marginTop: 4 },
@@ -889,12 +844,11 @@ const styles = {
   switch: { width: 38, height: 20, borderRadius: 20, position: "relative", transition: "background 0.2s" },
   switchKnob: { content: "", position: "absolute", top: 2, width: 16, height: 16, borderRadius: "50%", background: "#fff", transition: "left 0.2s" },
   logoutBtn: { padding: "6px 12px", cursor: "pointer", border: "1px solid #ccc", borderRadius: 6, background: "#f9f9f9" },
-  
-  main: { 
-    padding: "20px 24px 24px", 
-    background: "#f8f9fa", 
+  main: {
+    padding: "20px 24px 24px",
+    background: "#f8f9fa",
     flex: 1,
-    overflowX: "auto" 
+    overflowX: "auto"
   },
   sectionTitle: { margin: "0 0 20px", fontSize: 26, fontWeight: "bold" },
   gaugeGrid: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", gap: 14, marginBottom: 18 },
