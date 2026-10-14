@@ -211,10 +211,10 @@ function App() {
         {/* Bitácoras */}
         <Route
           path="/Bitacoras"
-          element={usuario ? <Bitacoras
-          usuario={usuario}
-          onLogout={handleLogout}
-          /> : <Navigate to="/login" replace />}
+          element={usuario ? <Bitacoras 
+                                usuario={usuario}
+                                onLogout={handleLogout}
+                                /> : <Navigate to="/login" replace />}
         />
 
         {/* Configuración: solo administradores */}
