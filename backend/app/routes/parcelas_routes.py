@@ -72,10 +72,9 @@ def editar_parcela(parcela_id):
 
     usuario_id = get_jwt_identity()
 
-    parcela = Parcela.query.filter_by(
-        id=parcela_id,
-        usuario_id=usuario_id
-    ).first()
+    parcela = db.session.get(Parcela, parcela_id)
+    if parcela and get_jwt().get("rol") != "admin" and str(parcela.usuario_id) != str(usuario_id):
+        parcela = None
 
     if not parcela:
         return jsonify({
@@ -106,18 +105,25 @@ def eliminar_parcela(parcela_id):
 
     usuario_id = get_jwt_identity()
 
-    parcela = Parcela.query.filter_by(
-        id=parcela_id,
-        usuario_id=usuario_id
-    ).first()
+    parcela = db.session.get(Parcela, parcela_id)
+    if parcela and get_jwt().get("rol") != "admin" and str(parcela.usuario_id) != str(usuario_id):
+        parcela = None
 
     if not parcela:
         return jsonify({
             "error": "Parcela no encontrada"
         }), 404
 
-    db.session.delete(parcela)
-    db.session.commit()
+    from ..models import Nodo
+    from sqlalchemy.exc import IntegrityError
+    if Nodo.query.filter_by(parcela_id=parcela_id).first():
+        return jsonify({"error": "Esta parcela tiene nodos asociados. No se puede eliminar sin resolver sus dependencias."}), 409
+    try:
+        db.session.delete(parcela)
+        db.session.commit()
+    except IntegrityError:
+        db.session.rollback()
+        return jsonify({"error": "La parcela tiene datos relacionados y no puede eliminarse por seguridad."}), 409
 
     return jsonify({
         "mensaje": "Parcela eliminada correctamente"

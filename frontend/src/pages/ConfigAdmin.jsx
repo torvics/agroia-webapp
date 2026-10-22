@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate, Link, useLocation } from "react-router-dom";
 import logoAgroIA from "../assets/agroia-logo.png";
+import Notificaciones from "../components/AvisosPanel";
 
 const API_URL = (
   import.meta.env.VITE_API_URL || "http://localhost:5001/api"
@@ -48,7 +49,7 @@ function obtenerRangoReporte(desde, hasta) {
   };
 }
 
-export default function ConfigAdmin() {
+export default function ConfigAdmin({ onLogout }) {
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -61,6 +62,16 @@ export default function ConfigAdmin() {
   const [usuarios, setUsuarios] = useState([]);
   const [error, setError] = useState("");
   const [cargandoUsuarios, setCargandoUsuarios] = useState(true);
+  const [altaAbierta, setAltaAbierta] = useState(false);
+  const [nuevoUsuario, setNuevoUsuario] = useState({ nombre: "", correo: "", rol: "agricultor", password: "" });
+  const [errorAlta, setErrorAlta] = useState("");
+  const [exitoAlta, setExitoAlta] = useState("");
+  const [creandoUsuario, setCreandoUsuario] = useState(false);
+  const [editandoUsuario, setEditandoUsuario] = useState(null);
+  const [edicionUsuario, setEdicionUsuario] = useState({ nombre:'', correo:'', rol:'agricultor', activo:true });
+  const [guardandoUsuario, setGuardandoUsuario] = useState(false);
+  const [errorEdicion, setErrorEdicion] = useState('');
+  const [okEdicion, setOkEdicion] = useState('');
 
   // Reportes: parcelas autorizadas, fechas y descarga autenticada.
   const [parcelasReporte, setParcelasReporte] = useState([]);
@@ -220,6 +231,7 @@ export default function ConfigAdmin() {
 
   const nodosMenu = nodosRegistrados.filter(
     (n) => n.tipo === "sensor_suelo" &&
+      n.estado === "activo" &&
       String(n.parcela_id) === String(parcelaReporte)
   );
 
@@ -305,7 +317,7 @@ export default function ConfigAdmin() {
       localStorage.getItem("token");
 
     if (!token) {
-      limpiarSesion();
+      if (onLogout) onLogout(); else limpiarSesion();
       return;
     }
 
@@ -324,7 +336,7 @@ export default function ConfigAdmin() {
         throw new Error("No se pudo revocar el token.");
       }
 
-      limpiarSesion();
+      if (onLogout) onLogout(); else limpiarSesion();
     } catch (err) {
       setError(
         "No fue posible cerrar sesión en el servidor. Verifica la conexión."
@@ -333,6 +345,47 @@ export default function ConfigAdmin() {
     }
   };
 
+  const crearUsuario = async (evento) => {
+    evento.preventDefault();
+    setErrorAlta(""); setExitoAlta("");
+    const nombre = nuevoUsuario.nombre.trim();
+    const correo = nuevoUsuario.correo.trim().toLowerCase();
+    if (nombre.length < 2 || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(correo) || nuevoUsuario.password.length < 8) {
+      setErrorAlta("Escribe nombre, correo válido y contraseña de al menos 8 caracteres."); return;
+    }
+    setCreandoUsuario(true);
+    try {
+      const token = localStorage.getItem("access_token") || localStorage.getItem("token");
+      const respuesta = await fetch(`${API_URL}/api/usuarios`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ nombre, correo, rol: nuevoUsuario.rol, password: nuevoUsuario.password }),
+      });
+      const creado = await respuesta.json().catch(() => ({}));
+      if (!respuesta.ok) throw new Error(creado.error || creado.msg || `No se pudo crear la cuenta (HTTP ${respuesta.status}). Comprueba la actualización del backend.`);
+      setUsuarios(actual => [...actual, creado]);
+      setNuevoUsuario({ nombre: "", correo: "", rol: "agricultor", password: "" });
+      setAltaAbierta(false);
+      setExitoAlta(`Usuario ${creado.nombre} registrado correctamente.`);
+    } catch (error) { setErrorAlta(error.message); }
+    finally { setCreandoUsuario(false); }
+  };
+
+  const guardarEdicionUsuario = async (e) => {
+    e.preventDefault();
+    if (guardandoUsuario || !editandoUsuario) return;
+    setErrorEdicion('');setOkEdicion('');setGuardandoUsuario(true);
+    try {
+      const datos = { ...edicionUsuario, nombre:edicionUsuario.nombre.trim(), correo:edicionUsuario.correo.trim().toLowerCase() };
+      if (datos.nombre.length<2 || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(datos.correo)) throw new Error('Nombre y correo válidos son obligatorios.');
+      const token = localStorage.getItem('access_token') || localStorage.getItem('token');
+      const res = await fetch(`${API_URL}/api/usuarios/${editandoUsuario}`, { method:'PUT', headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},body:JSON.stringify(datos) });
+      const r = await res.json().catch(()=>({}));
+      if(!res.ok) throw new Error(r.error || r.msg || `No se pudo modificar (HTTP ${res.status})`);
+      setUsuarios(actual=>actual.map(u=>u.id===r.id?r:u));
+      setEditandoUsuario(null);setOkEdicion('Usuario actualizado en MySQL. Los cambios de rol pueden requerir iniciar sesión de nuevo.');
+    } catch(err) {setErrorEdicion(err.message);} finally {setGuardandoUsuario(false);}
+  };
   // ============================================
   // INTERFAZ DE ADMINISTRACIÓN
   // ============================================
@@ -438,7 +491,7 @@ export default function ConfigAdmin() {
               Administración
             </div>
 
-            <div style={styles.iconCircle}>🔔</div>
+            <Notificaciones style={styles.iconCircle} />
 
             <button
               type="button"
@@ -527,19 +580,13 @@ export default function ConfigAdmin() {
             <div style={styles.cardHeaderFlex}>
               <div>
                 <h2 style={styles.cardTitle}>Usuarios y roles</h2>
+                <Link to="/gestion" style={{color:"#2F5413",fontSize:13}}>Administrar parcelas y nodos →</Link>
                 <p style={styles.cardSubtitle}>
                   Usuarios registrados en la base de datos de AgroIA
                 </p>
               </div>
 
-              <button
-                type="button"
-                style={styles.btnDeshabilitado}
-                disabled
-                title="Pendiente de implementar el endpoint para crear usuarios"
-              >
-                + Nuevo usuario
-              </button>
+              <button type="button" onClick={() => { setAltaAbierta(x => !x); setErrorAlta(""); setExitoAlta(""); }} style={{ ...styles.btnDeshabilitado, opacity: 1, cursor: "pointer", background: "#7A9D54", color: "#fff" }}>+ Nuevo usuario</button>
             </div>
 
             <div style={{ overflowX: "auto" }}>
@@ -550,13 +597,14 @@ export default function ConfigAdmin() {
                     <th style={styles.th}>Correo</th>
                     <th style={styles.th}>Rol</th>
                     <th style={styles.th}>Estado</th>
+                    <th style={styles.th}>Acciones</th>
                   </tr>
                 </thead>
 
                 <tbody>
                   {cargandoUsuarios && (
                     <tr>
-                      <td style={styles.td} colSpan={4}>
+                      <td style={styles.td} colSpan={5}>
                         Cargando usuarios...
                       </td>
                     </tr>
@@ -566,7 +614,7 @@ export default function ConfigAdmin() {
                     !error &&
                     usuarios.length === 0 && (
                       <tr>
-                        <td style={styles.td} colSpan={4}>
+                        <td style={styles.td} colSpan={5}>
                           No hay usuarios registrados.
                         </td>
                       </tr>
@@ -590,17 +638,40 @@ export default function ConfigAdmin() {
                             {user.activo ? "Activo" : "Inactivo"}
                           </span>
                         </td>
+                        <td style={styles.td}><button type="button" style={{...styles.btnDeshabilitado,opacity:1,cursor:'pointer',background:'#7A9D54',color:'#fff'}} onClick={()=>{setEditandoUsuario(user.id);setEdicionUsuario({nombre:user.nombre,correo:user.correo,rol:user.rol,activo:Boolean(user.activo)});setErrorEdicion('');setOkEdicion('');}}>Editar</button></td>
                       </tr>
                     ))}
                 </tbody>
               </table>
             </div>
 
-            <p style={styles.nota}>
-              La creación, modificación y eliminación de usuarios
-              estará disponible cuando se integren los endpoints
-              correspondientes del backend.
-            </p>
+            {editandoUsuario !== null && (
+              <form onSubmit={guardarEdicionUsuario} style={{background:'#f3f8ef',border:'1px solid #c9dfba',padding:16,borderRadius:10,marginTop:15,display:'grid',gap:10}}>
+                <strong>Editar usuario ID {editandoUsuario}</strong>
+                <label>Nombre<input required minLength={2} maxLength={100} style={{display:'block',padding:9,width:'100%',boxSizing:'border-box'}} value={edicionUsuario.nombre} onChange={e=>setEdicionUsuario(p=>({...p,nombre:e.target.value}))}/></label>
+                <label>Correo<input required type="email" style={{display:'block',padding:9,width:'100%',boxSizing:'border-box'}} value={edicionUsuario.correo} onChange={e=>setEdicionUsuario(p=>({...p,correo:e.target.value}))}/></label>
+                <label>Rol<select style={{display:'block',padding:9,width:'100%'}} value={edicionUsuario.rol} onChange={e=>setEdicionUsuario(p=>({...p,rol:e.target.value}))}><option value="admin">Administrador</option><option value="agricultor">Agricultor</option></select></label>
+                <label><input type="checkbox" checked={edicionUsuario.activo} onChange={e=>setEdicionUsuario(p=>({...p,activo:e.target.checked}))}/> Cuenta activa</label>
+                <p style={{fontSize:12,color:'#777'}}>No se edita la contraseña aquí. No puedes quitarte tus propios permisos de administrador. Los roles se revalidan al iniciar sesión.</p>
+                <div style={{display:'flex',gap:10}}><button style={styles.logoutBtn} disabled={guardandoUsuario} type="submit">{guardandoUsuario?'Guardando...':'Guardar cambios'}</button><button type="button" style={styles.logoutBtn} onClick={()=>setEditandoUsuario(null)}>Cancelar</button></div>
+              </form>
+            )}
+            {errorEdicion && <p role="alert" style={{color:'#b42318'}}>{errorEdicion}</p>}
+            {okEdicion && <p role="status" style={{color:'#2F5413'}}>{okEdicion}</p>}
+            {altaAbierta && (
+              <form onSubmit={crearUsuario} style={{ background: "#f3f8ef", border: "1px solid #c9dfba", borderRadius: 10, padding: 16, marginTop: 15, display: "grid", gap: 12 }}>
+                <strong>Registrar nuevo usuario</strong>
+                <label>Nombre <input required minLength={2} maxLength={100} value={nuevoUsuario.nombre} onChange={e => setNuevoUsuario(p => ({ ...p, nombre: e.target.value }))} style={{ padding: 9, width: "100%", boxSizing: "border-box" }} /></label>
+                <label>Correo <input required type="email" maxLength={255} value={nuevoUsuario.correo} onChange={e => setNuevoUsuario(p => ({ ...p, correo: e.target.value }))} style={{ padding: 9, width: "100%", boxSizing: "border-box" }} /></label>
+                <label>Rol <select value={nuevoUsuario.rol} onChange={e => setNuevoUsuario(p => ({ ...p, rol: e.target.value }))} style={{ padding: 9, display: "block", width: "100%" }}><option value="agricultor">Agricultor</option><option value="admin">Administrador</option></select></label>
+                <label>Contraseña inicial <input required type="password" minLength={8} maxLength={128} autoComplete="new-password" value={nuevoUsuario.password} onChange={e => setNuevoUsuario(p => ({ ...p, password: e.target.value }))} style={{ padding: 9, width: "100%", boxSizing: "border-box" }} /></label>
+                <p style={{ fontSize: 12, color: "#666" }}>Esta acción crea una cuenta real en MySQL. No se envían correos.</p>
+                <div style={{ display: "flex", gap: 10 }}><button type="submit" disabled={creandoUsuario} style={styles.logoutBtn}>{creandoUsuario ? "Creando..." : "Crear cuenta"}</button><button type="button" onClick={() => setAltaAbierta(false)} style={styles.logoutBtn}>Cancelar</button></div>
+              </form>
+            )}
+            {errorAlta && <p role="alert" style={{ color: "#b42318" }}>{errorAlta}</p>}
+            {exitoAlta && <p role="status" style={{ color: "#2F5413" }}>{exitoAlta}</p>}
+            <p style={styles.nota}>Los cambios de usuario se guardan en MySQL. Desactivar una cuenta evita futuros accesos según la verificación de autenticación del backend; las sesiones ya emitidas requieren control adicional de revocación.</p>
           </div>
 
           {/* REPORTES REALES POR PARCELA */}

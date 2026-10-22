@@ -1,8 +1,12 @@
 import { useState, useEffect } from "react";
 import { useNavigate, Link, useLocation } from "react-router-dom";
 import logoAgroIA from "../assets/agroia-logo.png";
+import Notificaciones from "../components/AvisosPanel";
+import MapaParcela from "../components/MapaParcela";
+import TipoRiegoSelector from "../components/TipoRiegoSelector";
+import TemperaturaUbicacion from "../components/TemperaturaUbicacion";
 const API_URL = (
-  import.meta.env.VITE_API_URL || "http://localhost:5000/api"
+  import.meta.env.VITE_API_URL || "http://localhost:5001/api"
 ).replace(/\/api\/?$/, "");
 const DATOS_VACIOS = {
   clima: { temperatura: null },
@@ -224,20 +228,42 @@ function LineChart({ nodos = [] }) {
     </div>
   );
 }
-// Indicador visual inactivo: no afirma el estado real de la válvula o bomba.
-function NodoToggle({ nombre }) {
+// Controla el estado administrativo del nodo en MySQL, no las válvulas ni los relés.
+function NodoToggle({ nodo, ocupado, onCambiar }) {
+  const activo = nodo.estado === "activo";
+  const enMantenimiento = nodo.estado === "mantenimiento";
+  const bloqueado = ocupado || enMantenimiento;
+  const nombre = nodo.identificador || `Nodo ${nodo.id}`;
   return (
     <div
-      style={{ ...styles.nodoToggle, opacity: 0.55 }}
-      title="Control de riego deshabilitado hasta validar el ESP32"
+      style={{ ...styles.nodoToggle, opacity: bloqueado ? 0.65 : 1 }}
+      title={enMantenimiento
+        ? `${nombre}: en mantenimiento; cambia su estado desde Gestionar.`
+        : `${nombre}: ${activo ? "activo" : "inactivo"} en AgroIA. No controla el riego físico.`}
     >
       <span>{nombre}</span>
-      <div
-        aria-hidden="true"
-        style={{ ...styles.switch, background: "#e0e0e0", cursor: "not-allowed" }}
+      <button
+        type="button"
+        role="switch"
+        aria-label={`${activo ? "Desactivar" : "Activar"} ${nombre}`}
+        aria-checked={activo}
+        aria-busy={ocupado}
+        disabled={bloqueado}
+        onClick={() => onCambiar(nodo)}
+        style={{
+          ...styles.switch,
+          background: activo ? "#7A9D54" : "#e0e0e0",
+          border: "none",
+          padding: 0,
+          flexShrink: 0,
+          cursor: bloqueado ? "not-allowed" : "pointer",
+        }}
       >
-        <div style={{ ...styles.switchKnob, left: 2 }} />
-      </div>
+        <span
+          aria-hidden="true"
+          style={{ ...styles.switchKnob, left: activo ? 20 : 2 }}
+        />
+      </button>
     </div>
   );
 }
@@ -256,6 +282,11 @@ export default function Dashboard({ usuario, onLogout }) {
   const [historicoNodos, setHistoricoNodos] = useState([]);
   const [cargandoHistorico, setCargandoHistorico] = useState(false);
   const [errorHistorico, setErrorHistorico] = useState("");
+  const [mapaAbierto, setMapaAbierto] = useState(false);
+  const [recargaManual, setRecargaManual] = useState(0);
+  const [nodoPendiente, setNodoPendiente] = useState(null);
+  const [errorCambioNodo, setErrorCambioNodo] = useState("");
+  const [mensajeCambioNodo, setMensajeCambioNodo] = useState("");
   useEffect(() => {
     const controlador = new AbortController();
     const cargarNodosRegistrados = async () => {
@@ -335,10 +366,14 @@ export default function Dashboard({ usuario, onLogout }) {
   useEffect(() => {
     if (!parcelaId) return;
     const controlador = new AbortController();
+    let consultando = false;
+    // No vaciar las tarjetas durante las actualizaciones periódicas.
+    setDatos(DATOS_VACIOS);
     async function cargarSensores() {
+      if (consultando || controlador.signal.aborted) return;
+      consultando = true;
       setCargandoDatos(true);
       setErrorDatos("");
-      setDatos(DATOS_VACIOS);
       try {
         const [lecturas, lluvia] = await Promise.all([
           consultarAPI(
@@ -352,14 +387,42 @@ export default function Dashboard({ usuario, onLogout }) {
         ]);
         if (controlador.signal.aborted) return;
         const estacion = lecturas.estacion ?? {};
-        const nodos = (lecturas.nodos ?? []).map((nodo, index) => ({
-          id: nodo.nodo_id,
-          nombre: nodo.identificador || `Nodo ${index + 1}`,
-          humedad: nodo.humedad_suelo ?? null,
-          temperatura: nodo.temp_suelo ?? null,
-          bateria: nodo.bateria_pct ?? null,
-          estado: "Sin confirmar",
-        }));
+        
+        const nodos = (lecturas.nodos ?? [])
+          .filter(nodo => nodosRegistrados.length === 0 || nodosRegistrados.some(r => Number(r.id) === Number(nodo.nodo_id) && r.estado === "activo" && r.tipo === "sensor_suelo"))
+          .map((nodo, index) => {
+          // Obtener la fecha de la ultima medicion.
+          const fechaMs = nodo.fecha_lectura
+            ? Date.parse(nodo.fecha_lectura)
+            : NaN;
+
+          // Calcular cuanto tiempo ha pasado desde esa lectura.
+          const edadMs = Date.now() - fechaMs;
+
+          // Considerar reciente una lectura de hasta 5 minutos.
+          const lecturaReciente =
+            Number.isFinite(edadMs) &&
+            edadMs >= 0 &&
+            edadMs <= 5 * 60 * 1000;
+
+          let estado = "Sin lecturas";
+
+          if (Number.isFinite(fechaMs)) {
+            estado = lecturaReciente
+              ? "Lectura reciente"
+              : "Lectura anterior";
+          }
+
+          return {
+            id: nodo.nodo_id,
+            nombre: nodo.identificador || `Nodo ${index + 1}`,
+            humedad: nodo.humedad_suelo ?? null,
+            temperatura: nodo.temp_suelo ?? null,
+            bateria: nodo.bateria_pct ?? null,
+            estado: estado,
+          };
+        });
+
         const promedio = (campo) => {
           const valores = nodos
             .map((nodo) => nodo[campo])
@@ -400,14 +463,22 @@ export default function Dashboard({ usuario, onLogout }) {
           setErrorDatos(error.message);
         }
       } finally {
+        consultando = false;
         if (!controlador.signal.aborted) {
           setCargandoDatos(false);
         }
       }
     }
     cargarSensores();
-    return () => controlador.abort();
-  }, [parcelaId]);
+    // El ESP32 publica cada 60 s; mantener los indicadores al día sin recargar la página.
+    const intervaloGuardado = Number(localStorage.getItem("agroia_intervalo_pantalla"));
+    const intervaloMs = [15,30,60,120].includes(intervaloGuardado) ? intervaloGuardado * 1000 : 60000;
+    const intervalo = setInterval(cargarSensores, intervaloMs);
+    return () => {
+      clearInterval(intervalo);
+      controlador.abort();
+    };
+  }, [parcelaId, recargaManual, nodosRegistrados]);
 // Consultar histórico cuando cambia la parcela seleccionada
 useEffect(() => {
   const controlador = new AbortController();
@@ -452,7 +523,7 @@ useEffect(() => {
   }
   cargarHistorico();
   return () => controlador.abort();
-}, [parcelaId]);
+}, [parcelaId, recargaManual]);
   // Estado que controla si la barra está abierta o cerrada (empieza en false)
   const [sidebarAbierta, setSidebarAbierta] = useState(false);
   // Estado para el menú de usuario
@@ -462,13 +533,72 @@ useEffect(() => {
 
   // Enlaces desde MySQL de los sensores de suelo de la parcela seleccionada.
   // GET /api/nodos respeta los permisos del usuario en Flask.
+  
   const nodosParcela = nodosRegistrados.filter(
     (nodo) =>
       parcelaId !== null &&
       parcelaId !== undefined &&
       Number(nodo.parcela_id) === Number(parcelaId) &&
-      nodo.tipo !== "estacion"
+      nodo.tipo !== "estacion" &&
+      nodo.estado === "activo"
   );
+
+  // Incluir también los inactivos para que puedan reactivarse sin salir del Dashboard.
+  // Los sensores en mantenimiento se muestran, pero su cambio se administra en Gestión.
+  const nodosControl = nodosRegistrados.filter(
+    (nodo) =>
+      parcelaId != null &&
+      Number(nodo.parcela_id) === Number(parcelaId) &&
+      nodo.tipo === "sensor_suelo"
+  );
+  // Filtrar las mediciones históricas de los nodos activos.
+const idsNodosActivos = new Set(
+  nodosControl
+    .filter((nodo) => nodo.estado === "activo")
+    .map((nodo) => Number(nodo.id))
+);
+
+  const historicoNodosActivos = historicoNodos.filter(
+    (nodo) => idsNodosActivos.has(Number(nodo.nodo_id))
+  );
+
+  const cambiarEstadoNodo = async (nodo) => {
+    if (nodoPendiente !== null || !["activo", "inactivo"].includes(nodo.estado)) return;
+    const token = localStorage.getItem("access_token") || localStorage.getItem("token");
+    if (!token) {
+      setErrorCambioNodo("La sesión ha caducado. Inicia sesión nuevamente.");
+      return;
+    }
+    const estadoNuevo = nodo.estado === "activo" ? "inactivo" : "activo";
+    setNodoPendiente(nodo.id);
+    setErrorCambioNodo("");
+    setMensajeCambioNodo("");
+    try {
+      const respuesta = await fetch(`${API_URL}/api/nodos/${nodo.id}`, {
+        method: "PUT",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ estado: estadoNuevo }),
+      });
+      const resultado = await respuesta.json().catch(() => ({}));
+      if (!respuesta.ok) {
+        throw new Error(resultado.error || resultado.msg || `Error HTTP ${respuesta.status}`);
+      }
+      if (resultado.estado !== estadoNuevo || Number(resultado.id) !== Number(nodo.id)) {
+        throw new Error("El servidor no confirmó el cambio de estado del nodo.");
+      }
+      setNodosRegistrados((previos) => previos.map((actual) =>
+        Number(actual.id) === Number(nodo.id) ? { ...actual, estado: estadoNuevo } : actual
+      ));
+      setMensajeCambioNodo(`${nodo.identificador || `Nodo ${nodo.id}`}: ${estadoNuevo}. Guardado en MySQL.`);
+    } catch (error) {
+      setErrorCambioNodo(`No se pudo actualizar el nodo: ${error.message}`);
+    } finally {
+      setNodoPendiente(null);
+    }
+  };
 
   const handleLogout = () => {
     onLogout();
@@ -501,6 +631,7 @@ useEffect(() => {
             <div style={styles.sidebarSectionTitle}>PRINCIPAL</div>
             <Link to="/dashboard" style={location.pathname === "/dashboard" ? styles.sidebarLinkActive : styles.sidebarLink}>Vista general</Link>
             <Link to="/Bitacoras" style={location.pathname === "/Bitacoras" ? styles.sidebarLinkActive : styles.sidebarLink}>Bitácoras</Link>
+            <Link to="/gestion" style={styles.sidebarLink}>Parcelas y nodos</Link>
           </div>
           <div style={styles.sidebarSection}>
             <div style={styles.sidebarSectionTitle}>NODOS</div>
@@ -550,10 +681,8 @@ useEffect(() => {
              />
           </Link>
           <div style={styles.bannerRight}>
-            <div style={styles.tempBadge}>
-              {datos.clima.temperatura ?? "—"} °C
-            </div>
-            <div style={styles.iconCircle}>🔔</div>
+            <TemperaturaUbicacion style={styles.tempBadge} />
+            <Notificaciones parcelaId={parcelaId} style={styles.iconCircle} />
             <div
               style={{ ...styles.iconCircle, cursor: "pointer" }}
               onClick={() => setMenuAbierto(!menuAbierto)}
@@ -615,9 +744,9 @@ useEffect(() => {
               ☰
             </span>
           )}
-          <div style={styles.mapIconBorder}>
+          <button type="button" onClick={() => setMapaAbierto(true)} title="Ver mapa de la parcela" aria-label="Ver mapa de la parcela" style={{ ...styles.mapIconBorder, background: "#fff", cursor: "pointer" }}>
             <span style={{ fontSize: 24 }}>🗺️</span>
-          </div>
+          </button>
           <div style={{ display: "flex", flexDirection: "column" }}>
               {parcelas.length > 1 ? (
                 <select
@@ -637,26 +766,40 @@ useEffect(() => {
                   {parcelas[0]?.nombre ?? "Sin parcelas"}
                 </h2>
               )}
-             <div style={styles.dots}>
-               {[1, 2, 3, 4].map((d) => <span key={d} style={styles.dot} />)}
+             <div style={styles.dots} aria-label="Nodos activos">
+               {nodosParcela.map((n) => <Link key={n.id} to={`/nodos/${n.id}`} title={`Abrir ${n.identificador}`} style={{ ...styles.dot, background: datos.nodos.some(m => m.id === n.id && m.estado === "Lectura reciente") ? "#7A9D54" : "#c4c4c4" }} />)}
              </div>
           </div>
           <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 15 }}>
             <div style={styles.selectGroupContainer}>
               <span style={{ fontSize: 10, color: "#777", marginBottom: 2 }}>Tipo de Riego</span>
-              <select style={styles.select} value="No configurado" disabled aria-label="Tipo de riego no configurado">
-                <option value="No configurado">No configurado</option>
-              </select>
+              <TipoRiegoSelector parcelaId={parcelaId} style={styles.select} />
             </div>
-            {nodosParcela.map((nodo) => (
-              <NodoToggle
-                key={nodo.id}
-                nombre={nodo.identificador || `Nodo ${nodo.id}`}
-              />
-            ))}
+            <div style={{ display: "flex", alignItems: "center", gap: 12, maxWidth: 480, overflowX: "auto", padding: "3px 0" }}>
+              {nodosControl.map((nodo) => (
+                <NodoToggle
+                  key={nodo.id}
+                  nodo={nodo}
+                  ocupado={nodoPendiente !== null}
+                  onCambiar={cambiarEstadoNodo}
+                />
+              ))}
+            </div>
+            <Link to="/gestion" style={{ ...styles.logoutBtn, textDecoration:"none", display:"inline-flex",alignItems:"center" }}>Gestionar</Link>
+            <button type="button" onClick={() => setRecargaManual(x => x + 1)} style={styles.logoutBtn} disabled={cargandoDatos}>↻ Actualizar</button>
             <button onClick={handleLogout} style={styles.logoutBtn}>Salir</button>
           </div>
         </div>
+        {errorCambioNodo && (
+          <div role="alert" style={{ padding: "8px 18px", color: "#9b1c1c", background: "#fff1f0", fontSize: 13 }}>
+            {errorCambioNodo}
+          </div>
+        )}
+        {mensajeCambioNodo && !errorCambioNodo && (
+          <div role="status" style={{ padding: "6px 18px", color: "#2F5413", background: "#f1f7eb", fontSize: 12 }}>
+            {mensajeCambioNodo} (No controla las bombas ni las válvulas.)
+          </div>
+        )}
         <main style={styles.main}>
           <h2 style={styles.sectionTitle}>Vista general</h2>
           <div style={styles.gaugeGrid}>
@@ -675,7 +818,7 @@ useEffect(() => {
           <div style={styles.bottomSection}>
             <div style={styles.chartCard}>
               <h3 style={{ margin: "0 0 10px", fontSize: 16 }}>
-                Humedad del suelo
+                Humedad del suelo - FILTRO ACTIVO
               </h3>
               {cargandoHistorico ? (
                 <p style={{ textAlign: "center", color: "#777" }}>
@@ -686,7 +829,17 @@ useEffect(() => {
                   Error al cargar el histórico: {errorHistorico}
                 </p>
               ) : (
-                <LineChart nodos={historicoNodos} />
+                cargandoNodos ? (
+                  <p style={{ textAlign: "center", color: "#777" }}>
+                    Verificando nodos activos...
+                  </p>
+                ) : idsNodosActivos.size === 0 ? (
+                  <p style={{ textAlign: "center", color: "#777" }}>
+                    No hay nodos activos en esta parcela.
+                  </p>
+                ) : (
+                  <LineChart nodos={historicoNodosActivos} />
+                )
               )}
             </div>
             <div style={styles.statsCol}>
@@ -718,6 +871,7 @@ useEffect(() => {
           </div>
         </main>
       </div>
+      {mapaAbierto && <MapaParcela parcela={parcelas.find(p => Number(p.id) === Number(parcelaId))} onClose={() => setMapaAbierto(false)} />}
     </div>
   );
 }

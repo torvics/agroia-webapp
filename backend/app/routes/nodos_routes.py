@@ -11,7 +11,7 @@ nodos_bp = Blueprint("nodos", __name__)
 
 
 @nodos_bp.route("", methods=["POST"])
-@requiere_rol("admin")
+@requiere_rol("admin", "agricultor")
 def registrar_nodo():
     """Solo un administrador puede registrar nodos."""
 
@@ -36,9 +36,9 @@ def registrar_nodo():
     parcela = db.session.get(Parcela, parcela_id)
 
     if not parcela:
-        return jsonify({
-            "error": "Parcela no encontrada"
-        }), 404
+        return jsonify({"error": "Parcela no encontrada"}), 404
+    if get_jwt().get("rol") != "admin" and str(parcela.usuario_id) != str(get_jwt_identity()):
+        return jsonify({"error": "Solo puedes registrar nodos en tus parcelas."}), 403
 
     nodo_existente = Nodo.query.filter_by(
         identificador=identificador
@@ -100,15 +100,17 @@ def listar_nodos():
 
 
 @nodos_bp.route("/<int:nodo_id>", methods=["PUT"])
-@requiere_rol("admin")
+@requiere_rol("admin", "agricultor")
 def editar_nodo(nodo_id):
 
     nodo = db.session.get(Nodo, nodo_id)
 
     if not nodo:
-        return jsonify({
-            "error": "Nodo no encontrado"
-        }), 404
+        return jsonify({"error": "Nodo no encontrado"}), 404
+    if get_jwt().get("rol") != "admin":
+        parcela_origen = db.session.get(Parcela, nodo.parcela_id)
+        if not parcela_origen or str(parcela_origen.usuario_id) != str(get_jwt_identity()):
+            return jsonify({"error": "No puedes modificar nodos de otra persona."}), 403
 
     data = request.get_json() or {}
 
@@ -135,9 +137,9 @@ def editar_nodo(nodo_id):
         )
 
         if not parcela:
-            return jsonify({
-                "error": "Parcela no encontrada"
-            }), 404
+            return jsonify({"error": "Parcela no encontrada"}), 404
+        if get_jwt().get("rol") != "admin" and str(parcela.usuario_id) != str(get_jwt_identity()):
+            return jsonify({"error": "No puedes transferir un nodo a otra parcela."}), 403
 
         nodo.parcela_id = data["parcela_id"]
 
@@ -182,15 +184,17 @@ def editar_nodo(nodo_id):
 
 
 @nodos_bp.route("/<int:nodo_id>", methods=["DELETE"])
-@requiere_rol("admin")
+@requiere_rol("admin", "agricultor")
 def dar_baja_nodo(nodo_id):
 
     nodo = db.session.get(Nodo, nodo_id)
 
     if not nodo:
-        return jsonify({
-            "error": "Nodo no encontrado"
-        }), 404
+        return jsonify({"error": "Nodo no encontrado"}), 404
+    if get_jwt().get("rol") != "admin":
+        parcela_origen = db.session.get(Parcela, nodo.parcela_id)
+        if not parcela_origen or str(parcela_origen.usuario_id) != str(get_jwt_identity()):
+            return jsonify({"error": "No puedes modificar nodos de otra persona."}), 403
 
     nodo.estado = "inactivo"
 

@@ -2,9 +2,11 @@
 import { useEffect, useState } from "react";
 import { useNavigate, Link, useLocation } from "react-router-dom";
 import logoAgroIA from "../assets/agroia-logo.png";
+import { leerPreferenciasAvisos, guardarPreferenciasAvisos } from "../components/avisosUtils";
+import Notificaciones from "../components/AvisosPanel";
 
 const API_URL = (
-  import.meta.env.VITE_API_URL || "http://localhost:5000/api"
+  import.meta.env.VITE_API_URL || "http://localhost:5001/api"
 ).replace(/\/api\/?$/, "");
 
 export default function ConfigCuenta({ onLogout }) {
@@ -14,6 +16,7 @@ export default function ConfigCuenta({ onLogout }) {
   const [cargandoPerfil, setCargandoPerfil] = useState(true);
   const [errorPerfil, setErrorPerfil] = useState("");
   const [cerrandoSesion, setCerrandoSesion] = useState(false);
+  const [preferenciasAvisos, setPreferenciasAvisos] = useState(() => leerPreferenciasAvisos());
   // Edición de perfil
   // null: ningún campo en edición
   // "nombre": editar solamente el nombre
@@ -68,13 +71,14 @@ export default function ConfigCuenta({ onLogout }) {
         }
 
         const datos = await respuesta.json();
+        const perfilActual = datos.usuario ?? datos;
 
         if (!controlador.signal.aborted) {
-          setPerfil(datos);
+          setPerfil(perfilActual);
 
           // Preparar los campos con información de MySQL
-          setNombreFormulario(datos.nombre ?? "");
-          setCorreoFormulario(datos.correo ?? "");
+          setNombreFormulario(perfilActual.nombre ?? "");
+          setCorreoFormulario(perfilActual.correo ?? "");
 
           setErrorPerfil("");
         }
@@ -214,12 +218,13 @@ const guardarPerfil = async () => {
       );
     }
 
-    setPerfil(resultado);
-    setNombreFormulario(resultado.nombre);
-    setCorreoFormulario(resultado.correo);
+    const perfilActualizado = resultado.usuario ?? resultado;
+    setPerfil(perfilActualizado);
+    setNombreFormulario(perfilActualizado.nombre);
+    setCorreoFormulario(perfilActualizado.correo);
     setPasswordActualCorreo("");
 
-    localStorage.setItem("nombre", resultado.nombre);
+    localStorage.setItem("nombre", perfilActualizado.nombre);
 
     setCampoEditando(null);
     setMensajePerfil("Perfil actualizado correctamente.");
@@ -386,19 +391,10 @@ const cambiarPassword = async () => {
 
           <div style={styles.sidebarSection}>
             <div style={styles.sidebarSectionTitle}>NODOS</div>
-            {[1, 2, 3, 4].map((numero) => (
-              <Link
-                key={numero}
-                to={`/nodo${numero}`}
-                style={
-                  location.pathname === `/nodo${numero}`
-                    ? styles.sidebarLinkActive
-                    : styles.sidebarLink
-                }
-              >
-                Nodo {numero}
-              </Link>
-            ))}
+            {/* Los nodos son dinámicos; sus rutas reales se encuentran en el Dashboard. */}
+            <Link to="/dashboard" style={styles.sidebarLink}>
+              Ver nodos activos
+            </Link>
           </div>
 
           <div style={styles.sidebarFooter}>
@@ -436,8 +432,8 @@ const cambiarPassword = async () => {
               position: "relative",
             }}
           >
-            <div style={styles.tempBadge}>— °C</div>
-            <div style={styles.iconCircle}>🔔</div>
+            <div style={styles.tempBadge}>Mi cuenta</div>
+            <Notificaciones style={styles.iconCircle} />
 
             {/* Menú de usuario */}
             <button
@@ -774,47 +770,23 @@ const cambiarPassword = async () => {
 
 
 
-              {/* PREFERENCIAS TODAVÍA NO CONFIGURABLES */}
+              {/* Preferencias visuales de avisos de este navegador, independientes de SMTP. */}
               <div style={styles.card}>
                 <h3 style={styles.cardTitle}>PREFERENCIAS RÁPIDAS</h3>
-
+                <p style={{ fontSize: 12, color: "#666", padding: "0 18px" }}>Estas preferencias controlan los avisos dentro del navegador; no modifican el envío de correos.</p>
                 <div style={styles.cardContent}>
                   <ListItem
                     icono="🔔"
-                    titulo="Alertas de humedad baja"
-                    subtitulo="Pendiente de integración"
-                    rightElement={
-                      <div
-                        style={{
-                          ...styles.toggleBgBlue,
-                          backgroundColor: "#ccc",
-                          opacity: 0.55,
-                          cursor: "not-allowed",
-                        }}
-                      >
-                        <div style={{ ...styles.toggleKnob, left: 2 }} />
-                      </div>
-                    }
+                    titulo="Avisos de humedad baja"
+                    subtitulo="Mostrar avisos visuales según el umbral de la parcela"
+                    rightElement={<label style={{ cursor: "pointer", display: "flex", alignItems: "center", gap: 8 }}><input type="checkbox" checked={preferenciasAvisos.suelo} onChange={e => { const nuevas = { ...preferenciasAvisos, suelo: e.target.checked }; setPreferenciasAvisos(nuevas); guardarPreferenciasAvisos(nuevas); }} /><span>{preferenciasAvisos.suelo ? "Sí" : "No"}</span></label>}
                   />
-
                   <ListItem
-                    icono="🔔"
-                    titulo="Batería baja del nodo"
-                    subtitulo="Pendiente de integración"
-                    rightElement={
-                      <div
-                        style={{
-                          ...styles.toggleBgBlue,
-                          backgroundColor: "#ccc",
-                          opacity: 0.55,
-                          cursor: "not-allowed",
-                        }}
-                      >
-                        <div style={{ ...styles.toggleKnob, left: 2 }} />
-                      </div>
-                    }
+                    icono="🔋"
+                    titulo="Avisos de batería baja"
+                    subtitulo="Mostrar avisos visuales cuando una batería esté por debajo del 20 %"
+                    rightElement={<label style={{ cursor: "pointer", display: "flex", alignItems: "center", gap: 8 }}><input type="checkbox" checked={preferenciasAvisos.bateria} onChange={e => { const nuevas = { ...preferenciasAvisos, bateria: e.target.checked }; setPreferenciasAvisos(nuevas); guardarPreferenciasAvisos(nuevas); }} /><span>{preferenciasAvisos.bateria ? "Sí" : "No"}</span></label>}
                   />
-
                   <ListItem
                     icono="🌐"
                     titulo="Idioma"

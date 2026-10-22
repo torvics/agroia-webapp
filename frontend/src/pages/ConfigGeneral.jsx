@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate, Link, useLocation } from "react-router-dom";
 import logoAgroIA from "../assets/agroia-logo.png";
+import Notificaciones from "../components/AvisosPanel";
 
 const API_URL = (
   import.meta.env.VITE_API_URL || "http://localhost:5001/api"
@@ -77,6 +78,14 @@ export default function ConfigGeneral({ usuario, onLogout }) {
   const [errorConfig, setErrorConfig] = useState("");
   const [errorCargaConfig, setErrorCargaConfig] = useState("");
   const [mensaje, setMensaje] = useState("");
+  const [accionNodo, setAccionNodo] = useState("");
+  const [identificadorNodo, setIdentificadorNodo] = useState("");
+  const [tipoNuevoNodo, setTipoNuevoNodo] = useState("sensor_suelo");
+  const [apiKeyNuevoNodo, setApiKeyNuevoNodo] = useState("");
+  const [errorNodo, setErrorNodo] = useState("");
+  const [exitoNodo, setExitoNodo] = useState("");
+  const [guardandoNodo, setGuardandoNodo] = useState(false);
+  const [intervaloPantalla, setIntervaloPantalla] = useState(() => { const n = Number(localStorage.getItem("agroia_intervalo_pantalla")); return [15,30,60,120].includes(n) ? n : 60; });
 
   // Perfil, parcelas y nodos autorizados para el usuario autenticado.
   useEffect(() => {
@@ -166,7 +175,9 @@ export default function ConfigGeneral({ usuario, onLogout }) {
   const nodosParcela = nodos.filter(
     (n) => String(n.parcela_id) === String(parcelaId)
   );
-  const nodosSuelo = nodosParcela.filter((n) => n.tipo === "sensor_suelo");
+  const nodosSuelo = nodosParcela.filter(
+    (n) => n.tipo === "sensor_suelo" && n.estado === "activo"
+  );
   const administrador = perfil?.rol === "admin";
 
   // Si se cambia la parcela, seleccionar un nodo de la nueva parcela.
@@ -295,6 +306,38 @@ export default function ConfigGeneral({ usuario, onLogout }) {
     }
   };
 
+  const guardarNodo = async () => {
+    if (guardandoNodo) return;
+    setErrorNodo(""); setExitoNodo(""); setApiKeyNuevoNodo("");
+    const identificador = identificadorNodo.trim();
+    if (!/^[a-zA-Z0-9_-]{3,64}$/.test(identificador)) {
+      setErrorNodo("Identificador de 3 a 64 caracteres: letras, números, guiones y guiones bajos."); return;
+    }
+    if (accionNodo === "editar") {
+      const seleccionado = nodosSuelo.find(n => String(n.id) === String(nodoId));
+      if (!seleccionado) { setErrorNodo("Selecciona un nodo de suelo activo."); return; }
+      if (!window.confirm(`Cambiar el identificador de ${seleccionado.identificador} puede afectar al firmware y al histórico. ¿Confirmas el cambio?`)) return;
+    }
+    setGuardandoNodo(true);
+    try {
+      const editar = accionNodo === "editar";
+      const ruta = editar ? `/nodos/${nodoId}` : "/nodos";
+      const payload = editar ? { identificador } : { parcela_id: Number(parcelaId), identificador, tipo: tipoNuevoNodo };
+      const creado = await consultarAPI(ruta, { method: editar ? "PUT" : "POST", body: payload });
+      if (editar) {
+        setNodos(anteriores => anteriores.map(n => Number(n.id) === Number(nodoId) ? { ...n, identificador: creado.identificador } : n));
+        setExitoNodo("Nombre actualizado en MySQL. Comprueba la configuración del firmware y las consultas históricas.");
+      } else {
+        setNodos(anteriores => [...anteriores, creado]);
+        setApiKeyNuevoNodo(creado.api_key || "");
+        setExitoNodo(`Nodo ${creado.identificador} creado correctamente (ID ${creado.id}).`);
+      }
+      setIdentificadorNodo("");
+      setAccionNodo("");
+    } catch (error) {
+      setErrorNodo(error.message || "No se pudo guardar el nodo.");
+    } finally { setGuardandoNodo(false); }
+  };
   const handleLogout = () => onLogout?.();
   const handleCancelar = () => navigate("/dashboard");
 
@@ -360,7 +403,7 @@ export default function ConfigGeneral({ usuario, onLogout }) {
           </Link>
           <div style={styles.bannerRight}>
             <div style={styles.tempBadge}>Configuración</div>
-            <div style={styles.iconCircle} title="Alertas del sistema">🔔</div>
+            <Notificaciones parcelaId={parcelaId} style={styles.iconCircle} />
             <button type="button" style={{ ...styles.iconCircle, border: "none", color: "#fff", cursor: "pointer" }}
               onClick={() => setMenuAbierto(!menuAbierto)} aria-label="Abrir menú de usuario">👤</button>
 
@@ -522,7 +565,7 @@ export default function ConfigGeneral({ usuario, onLogout }) {
                   <div style={styles.row}>
                     <div>
                       <div style={styles.itemTitle}>Nodo de suelo</div>
-                      <div style={styles.itemDesc}>Solo lectura por ahora. Los cambios de hardware se integrarán por separado.</div>
+                      <div style={styles.itemDesc}>Selecciona un nodo para renombrarlo o consultar su estado. Los controles físicos siguen deshabilitados.</div>
                     </div>
                     <select style={styles.selectInput} value={nodoId}
                       onChange={(e) => setNodoId(e.target.value)}
@@ -535,49 +578,62 @@ export default function ConfigGeneral({ usuario, onLogout }) {
                   <div style={styles.row}>
                     <div style={{ display: "flex", alignItems: "center", gap: 15 }}>
                       <div style={styles.iconBadgeLight}>➕</div>
-                      <div>
-                        <div style={styles.itemTitle}>Agregar nuevo nodo</div>
-                        <div style={styles.itemDesc}>
-                          {administrador ? "Pendiente: entrega segura de la API key al ESP32." : "Disponible solo para administradores."}
-                        </div>
-                      </div>
+                      <div><div style={styles.itemTitle}>Agregar nuevo nodo</div>
+                      <div style={styles.itemDesc}>Registro real en MySQL; el backend genera una clave API que debes entregar al dispositivo.</div></div>
                     </div>
-                    <button type="button" disabled style={{ ...styles.saveBtn, opacity: 0.45, cursor: "not-allowed" }}>
-                      Pendiente
-                    </button>
+                    <button type="button" disabled={!parcelaId || guardandoNodo} style={{ ...styles.saveBtn, opacity: parcelaId ? 1 : 0.5 }} onClick={() => { setAccionNodo(accionNodo === "crear" ? "" : "crear"); setErrorNodo(""); setExitoNodo(""); setApiKeyNuevoNodo(""); setIdentificadorNodo(""); }}>+ Nuevo nodo</button>
                   </div>
                   <div style={styles.row}>
                     <div style={{ display: "flex", alignItems: "center", gap: 15 }}>
                       <div style={styles.iconBadgeLight}>📝</div>
-                      <div>
-                        <div style={styles.itemTitle}>Renombrar nodos</div>
-                        <div style={styles.itemDesc}>
-                          {administrador ? "Pendiente: sincronizar identificador en firmware y lecturas históricas." : "Disponible solo para administradores."}
-                        </div>
+                      <div><div style={styles.itemTitle}>Renombrar nodo</div>
+                      <div style={styles.itemDesc}>Actualiza el identificador en MySQL; requiere coordinarlo con firmware e histórico.</div></div>
+                    </div>
+                    <button type="button" disabled={!nodoId || guardandoNodo} style={{ ...styles.saveBtn, opacity: nodoId ? 1 : 0.5 }} onClick={() => { setAccionNodo(accionNodo === "editar" ? "" : "editar"); setErrorNodo(""); setExitoNodo(""); setApiKeyNuevoNodo(""); setIdentificadorNodo(nodosSuelo.find(n => String(n.id) === String(nodoId))?.identificador || ""); }}>Renombrar</button>
+                  </div>
+                  {accionNodo && (
+                    <div style={{ background: "#f5faef", padding: 15, borderRadius: 9, border: "1px solid #d5e4c9", display: "grid", gap: 10 }}>
+                      <strong>{accionNodo === "crear" ? "Registrar nodo" : "Renombrar nodo seleccionado"}</strong>
+                      <label>Identificador del dispositivo
+                        <input value={identificadorNodo} onChange={e => setIdentificadorNodo(e.target.value)} maxLength={64} placeholder="nodo-nuevo-05" style={{ ...styles.selectInput, display: "block", marginTop: 4, width: "100%", boxSizing: "border-box" }} />
+                      </label>
+                      {accionNodo === "crear" && <label>Tipo de dispositivo
+                        <select value={tipoNuevoNodo} onChange={e => setTipoNuevoNodo(e.target.value)} style={{ ...styles.selectInput, display: "block", marginTop: 4 }}><option value="sensor_suelo">Sensor de suelo</option><option value="estacion">Estación meteorológica</option></select>
+                      </label>}
+                      <div style={{ display: "flex", gap: 10 }}>
+                        <button type="button" disabled={guardandoNodo} onClick={guardarNodo} style={styles.saveBtn}>{guardandoNodo ? "Guardando..." : "Confirmar"}</button>
+                        <button type="button" onClick={() => setAccionNodo("")} style={styles.cancelBtn}>Cancelar</button>
                       </div>
                     </div>
-                    <button type="button" disabled style={{ ...styles.saveBtn, opacity: 0.45, cursor: "not-allowed" }}>
-                      Pendiente
-                    </button>
-                  </div>
+                  )}
+                  {errorNodo && <p role="alert" style={{ color: "#b42318" }}>{errorNodo}</p>}
+                  {exitoNodo && <p role="status" style={{ color: "#2F5413" }}>{exitoNodo}</p>}
+                  {apiKeyNuevoNodo && (
+                    <div style={{ padding: 12, border: "2px solid #bcd5aa", borderRadius: 8, overflowWrap: "anywhere" }}>
+                      <strong>API key del nuevo nodo — copiar ahora, no volverá a mostrarse:</strong>
+                      <p><code>{apiKeyNuevoNodo}</code></p>
+                      <button type="button" onClick={() => navigator.clipboard.writeText(apiKeyNuevoNodo)} style={styles.saveBtn}>Copiar API key</button>
+                      <p style={{ fontSize: 12 }}>Guárdala de forma segura y configúrala en el ESP32 correspondiente; no se activa hardware automáticamente.</p>
+                    </div>
+                  )}
                   <div style={{ fontSize: 13, color: "#777" }}>
-                    Nodos en la parcela: {nodosParcela.length} (incluidas estaciones meteorológicas).
+                    Nodos en la parcela: {nodosParcela.length} (incluidas estaciones meteorológicas). <Link to="/gestion" style={{color:"#2F5413",fontWeight:"bold",marginLeft:12}}>Gestionar parcelas, estado y bajas →</Link>
                   </div>
                 </section>
 
                 <section style={styles.section}>
-                  <h3 style={styles.sectionTitle}>Frecuencia de muestreo</h3>
-                  <p style={styles.sectionDesc}>
-                    Configurar cada cuánto tiempo el ESP32 envía mediciones requiere soporte del firmware
-                    y confirmación del dispositivo. Por ahora no se puede guardar esta opción.
-                  </p>
+                  <h3 style={styles.sectionTitle}>Actualización del Dashboard</h3>
+                  <p style={styles.sectionDesc}>Elige cada cuánto consulta el navegador las mediciones más recientes. Esto no modifica la frecuencia física de envío del ESP32.</p>
                   <div style={styles.row}>
                     <div style={{ display: "flex", alignItems: "center", gap: 15 }}>
                       <div style={styles.iconBadgeLight}>🕒</div>
-                      <div style={styles.itemTitle}>Intervalo de lectura</div>
+                      <div style={styles.itemTitle}>Intervalo de actualización</div>
                     </div>
-                    <select style={styles.selectInputSmall} value="sin-configurar" disabled>
-                      <option value="sin-configurar">No configurado</option>
+                    <select style={styles.selectInputSmall} value={intervaloPantalla} onChange={e => { const segundos = Number(e.target.value); setIntervaloPantalla(segundos); localStorage.setItem("agroia_intervalo_pantalla", String(segundos)); }}>
+                      <option value={15}>Cada 15 segundos</option>
+                      <option value={30}>Cada 30 segundos</option>
+                      <option value={60}>Cada 60 segundos</option>
+                      <option value={120}>Cada 2 minutos</option>
                     </select>
                   </div>
                 </section>

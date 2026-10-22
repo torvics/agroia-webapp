@@ -7,9 +7,10 @@ haciendo el papel que antes hacía LoRa. El padre las reenvía a la página web.
 
   PC (este script) --HTTP--> ESP32 padre --HTTP--> Backend Flask (web)
 
-Nodo 1 además simula el pluviómetro (campo lluvia_mm), igual que el
-nodo hijo real. Si llueve, llueve en toda la parcela: los otros 3 nodos
-suben su humedad cuando el Nodo 1 reporta lluvia.
+Nodo 1 además simula el pluviómetro y una estación meteorológica virtual.
+Envía temperatura y humedad ambientales, lluvia de cada ciclo y lluvia acumulada
+al ESP32 padre, que reenvía los datos a Flask. Los otros 3 nodos comparten la
+misma lluvia y aumentan su humedad cuando llueve.
 
 Instalar dependencias:
   pip install requests
@@ -42,7 +43,12 @@ ENVIAR_A_PADRE = os.getenv("ENVIAR_A_PADRE", "1") == "1"
 # CONFIGURACIÓN NODOS SIMULADOS
 # ────────────────────────────────────────────────────────────
 INTERVALO_SEGUNDOS = int(os.getenv("INTERVALO_SEGUNDOS", "60"))
-PROB_LLUVIA        = 0.05   # probabilidad de lluvia en cada ciclo
+PROB_LLUVIA        = float(os.getenv("PROB_LLUVIA", "0.05"))
+CICLOS_MAXIMOS      = int(os.getenv("CICLOS_MAXIMOS", "0"))  # 0 = sin limite
+if not (0.0 <= PROB_LLUVIA <= 1.0):
+    raise ValueError("PROB_LLUVIA debe estar entre 0 y 1")
+if CICLOS_MAXIMOS < 0:
+    raise ValueError("CICLOS_MAXIMOS no puede ser negativo")
 
 # "hectarea" ya no viaja a la web, pero el firmware del padre la sigue
 # validando (struct_message), así que se mantiene en el paquete.
@@ -62,6 +68,10 @@ class Clima:
         self.lock = threading.Lock()
         self.evento = 0          # sube 1 en cada ciclo del pluviómetro
         self.lluvia_mm = 0.0     # lluvia de ese ciclo
+        self.lluvia_acum_mm = 0.0  # acumulada desde que inicia el simulador
+        self.temp_ambiente = 26.0
+        self.humedad_ambiente = 55.0
+        self.bateria_estacion_pct = 92.0
 
     def nuevo_ciclo(self):
         """Lo llama el Nodo 1 (pluviómetro): decide si llovió en este ciclo."""
@@ -71,7 +81,26 @@ class Clima:
                 self.lluvia_mm = round(random.uniform(0.5, 6.0), 1)
             else:
                 self.lluvia_mm = 0.0
+            self.lluvia_acum_mm = round(self.lluvia_acum_mm + self.lluvia_mm, 1)
+            self.temp_ambiente = round(max(20.0, min(36.0,
+                self.temp_ambiente + random.uniform(-0.4, 0.4))), 1)
+            incremento_humedad = random.uniform(-1.2, 1.2)
+            if self.lluvia_mm > 0:
+                incremento_humedad += 4.0
+            self.humedad_ambiente = round(max(30.0, min(85.0,
+                self.humedad_ambiente + incremento_humedad)), 1)
+            self.bateria_estacion_pct = round(max(70.0,
+                self.bateria_estacion_pct - random.uniform(0, 0.02)), 1)
             return self.lluvia_mm
+
+    def datos_estacion(self):
+        with self.lock:
+            return {
+                "temp_ambiente": self.temp_ambiente,
+                "humedad_ambiente": self.humedad_ambiente,
+                "lluvia_acum_mm": self.lluvia_acum_mm,
+                "bateria_estacion_pct": self.bateria_estacion_pct,
+            }
 
     def leer(self):
         with self.lock:
@@ -128,15 +157,17 @@ class EstadoNodo:
         self.dia_ciclo = (self.dia_ciclo + 1) % 140
 
         lluvia = self.leer_lluvia()
-        return {
+        lectura = {
             "nodo_id":       self.id,
             "hectarea":      self.hectarea,
             "temp_suelo":    self.leer_temperatura_suelo(),
             "humedad_suelo": self.actualizar_humedad_suelo(lluvia),
             "bateria_pct":   self.leer_bateria(),
-            # El firmware del padre solo usa lluvia_mm cuando nodo_id == 1
             "lluvia_mm":     lluvia if self.pluviometro else 0.0,
         }
+        if self.pluviometro:
+            lectura.update(clima.datos_estacion())
+        return lectura
 
 
 # ────────────────────────────────────────────────────────────
@@ -147,7 +178,8 @@ def mandar_al_padre(lectura):
         return True
 
     try:
-        resp = requests.post(PADRE_ENDPOINT, json=lectura, timeout=3)
+        # El ESP32 puede realizar dos POST seguidos: suelo y estacion.
+        resp = requests.post(PADRE_ENDPOINT, json=lectura, timeout=15)
         return resp.status_code == 200
 
     except requests.exceptions.ConnectionError:
@@ -174,10 +206,16 @@ def loop_nodo(nodo_estado):
         print(f"  Bateria:     {lectura['bateria_pct']}%")
         if nodo_estado.pluviometro:
             print(f"  Lluvia:      {lectura['lluvia_mm']} mm")
+            print(f"  Lluvia acum: {lectura['lluvia_acum_mm']} mm")
+            print(f"  Temp amb:    {lectura['temp_ambiente']} C")
+            print(f"  Hum amb:     {lectura['humedad_ambiente']}%")
 
         ok_padre = mandar_al_padre(lectura)
-        print(f"  Padre: {'✓' if ok_padre else '✗ (offline)'}")
+        print(f"  Padre: {'✓' if ok_padre else '✗ (error en envio)'}")
 
+        # Modo de pruebas: terminar automaticamente despues de N lecturas/nodo.
+        if CICLOS_MAXIMOS > 0 and nodo_estado.msg_count >= CICLOS_MAXIMOS:
+            break
         time.sleep(INTERVALO_SEGUNDOS)
 
 
@@ -191,8 +229,10 @@ def main():
     print(f"Padre ESP32: {PADRE_ENDPOINT}")
     print(f"Intervalo:   {INTERVALO_SEGUNDOS}s por nodo")
     print(f"Nodos:       {[n['id'] for n in NODOS]}")
+    print(f"Ciclos:      {CICLOS_MAXIMOS if CICLOS_MAXIMOS else 'sin limite'}")
     print("=" * 60)
 
+    hilos = []
     # Nodo 1 arranca primero (es el que decide la lluvia de cada ciclo)
     for config in NODOS:
         estado = EstadoNodo(config)
@@ -202,8 +242,15 @@ def main():
             daemon=True,
             name=f"Nodo-{config['id']}",
         )
+        hilos.append(hilo)
         hilo.start()
         time.sleep(2)
+
+    if CICLOS_MAXIMOS > 0:
+        for hilo in hilos:
+            hilo.join()
+        print("\n[Prueba finalizada] Todos los nodos completaron sus ciclos.")
+        return
 
     try:
         print("\n[Sistema corriendo] Ctrl+C para detener\n")

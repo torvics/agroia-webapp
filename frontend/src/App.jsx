@@ -11,13 +11,10 @@ import ConfigGeneral from "./pages/ConfigGeneral";
 import RecuperarContra from "./components/recuperarcontra";
 import Bitacoras from "./pages/Bitacoras";
 import NodoDetalle from "./pages/NodoDetalle";
-import Nodo1 from "./pages/Nodo1";
-import Nodo2 from "./pages/Nodo2";
-import Nodo3 from "./pages/Nodo3";
-import Nodo4 from "./pages/Nodo4";
+import GestionParcelasNodos from "./pages/GestionParcelasNodos";
 
 const API_URL = (
-  import.meta.env.VITE_API_URL || "http://localhost:5000/api"
+  import.meta.env.VITE_API_URL || "http://localhost:5001/api"
 ).replace(/\/api\/?$/, "");
 
 function limpiarSesion() {
@@ -61,7 +58,7 @@ function App() {
         const perfil = await respuesta.json();
 
         if (!controlador.signal.aborted) {
-          setUsuario(perfil);
+          setUsuario(perfil.usuario ?? perfil);
         }
       } catch (error) {
         if (!controlador.signal.aborted) {
@@ -154,7 +151,7 @@ function App() {
 
         <Route
           path="/recuperar-password"
-          element={<RecuperarContra />}
+          element={<Navigate to="/login" replace />}
         />
 
         {/* Dashboard */}
@@ -188,25 +185,7 @@ function App() {
             }
           />
 
-        <Route
-          path="/nodo1"
-          element={usuario ? <Nodo1 /> : <Navigate to="/login" replace />}
-        />
-
-        <Route
-          path="/nodo2"
-          element={usuario ? <Nodo2 /> : <Navigate to="/login" replace />}
-        />
-
-        <Route
-          path="/nodo3"
-          element={usuario ? <Nodo3 /> : <Navigate to="/login" replace />}
-        />
-
-        <Route
-          path="/nodo4"
-          element={usuario ? <Nodo4 /> : <Navigate to="/login" replace />}
-        />
+    
 
         {/* Bitácoras */}
         <Route
@@ -217,6 +196,8 @@ function App() {
                                 /> : <Navigate to="/login" replace />}
         />
 
+        <Route path="/gestion" element={usuario ? <GestionParcelasNodos usuario={usuario} onLogout={handleLogout}/> : <Navigate to="/login" replace/>} />
+
         {/* Configuración: solo administradores */}
         <Route
           path="/config-admin"
@@ -224,7 +205,7 @@ function App() {
             !usuario ? (
               <Navigate to="/login" replace />
             ) : usuario.rol === "admin" ? (
-              <ConfigAdmin />
+              <ConfigAdmin onLogout={handleLogout} />
             ) : (
               <Navigate to="/dashboard" replace />
             )
@@ -243,8 +224,13 @@ function App() {
         <Route
           path="/config-general"
           element={
-            usuario ? <ConfigGeneral /> : <Navigate to="/login" replace />
+            usuario ? <ConfigGeneral usuario={usuario} onLogout={handleLogout} /> : <Navigate to="/login" replace />
           }
+        />
+        {/* Evitar pantallas vacías al abrir una ruta que no existe. */}
+        <Route
+          path="*"
+          element={<Navigate to={usuario ? "/dashboard" : "/login"} replace />}
         />
       </Routes>
     </BrowserRouter>

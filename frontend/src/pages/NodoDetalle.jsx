@@ -1,6 +1,9 @@
 import { useEffect, useState } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import logoAgroIA from "../assets/agroia-logo.png";
+import Notificaciones from "../components/AvisosPanel";
+import MapaParcela from "../components/MapaParcela";
+import TipoRiegoSelector from "../components/TipoRiegoSelector";
 
 // La variable de Vite puede contener /api al final.
 // Se normaliza para construir siempre las rutas /api/...
@@ -137,6 +140,8 @@ export default function NodoDetalle({ usuario, onLogout }) {
   const navigate = useNavigate();
   const location = useLocation();
 
+  const [mapaAbierto, setMapaAbierto] = useState(false);
+  const [parcelaMapa, setParcelaMapa] = useState(null);
   const [nodo, setNodo] = useState(null);
   const [nodos, setNodos] = useState([]);
   const [medicion, setMedicion] = useState(null);
@@ -255,6 +260,18 @@ export default function NodoDetalle({ usuario, onLogout }) {
 
   const handleLogout = () => onLogout?.();
 
+  const abrirMapa = async () => {
+    setMapaAbierto(true);
+    try {
+      const token = localStorage.getItem("access_token") || localStorage.getItem("token");
+      const respuesta = await fetch(`${API_URL}/api/parcelas`, { headers: { Authorization: `Bearer ${token}` } });
+      if (!respuesta.ok) return;
+      const resultado = await respuesta.json();
+      const lista = Array.isArray(resultado) ? resultado : resultado.parcelas ?? [];
+      setParcelaMapa(lista.find(p => Number(p.id) === Number(nodo?.parcela_id)) || null);
+    } catch { /* El mapa mostrará la parcela sin coordenadas si no es posible consultarlas. */ }
+  };
+
   return (
     <div style={styles.app}>
       <aside
@@ -276,6 +293,7 @@ export default function NodoDetalle({ usuario, onLogout }) {
             <div style={styles.sidebarSectionTitle}>PRINCIPAL</div>
             <Link to="/dashboard" style={location.pathname === "/dashboard" ? styles.sidebarLinkActive : styles.sidebarLink}>Vista general</Link>
             <Link to="/Bitacoras" style={location.pathname === "/Bitacoras" ? styles.sidebarLinkActive : styles.sidebarLink}>Bitácoras</Link>
+            <Link to="/gestion" style={styles.sidebarLink}>Parcelas y nodos</Link>
           </div>
           <div style={styles.sidebarSection}>
             <div style={styles.sidebarSectionTitle}>NODOS DE SUELO</div>
@@ -283,6 +301,7 @@ export default function NodoDetalle({ usuario, onLogout }) {
               .filter(
                 (item) =>
                   item.tipo !== "estacion" &&
+                  item.estado === "activo" &&
                   nodo !== null &&
                   Number(item.parcela_id) === Number(nodo.parcela_id)
               )
@@ -299,7 +318,12 @@ export default function NodoDetalle({ usuario, onLogout }) {
                   {item.identificador || `Nodo ${item.id}`}
                 </Link>
               ))}
-            {!nodos.some((item) => item.tipo !== "estacion") && (
+            {!nodos.some((item) =>
+              item.tipo !== "estacion" &&
+              item.estado === "activo" &&
+              nodo !== null &&
+              Number(item.parcela_id) === Number(nodo.parcela_id)
+            ) && (
               <span style={{ padding: "12px 20px", fontSize: 13, color: "#666" }}>Sin nodos disponibles</span>
             )}
           </div>
@@ -316,7 +340,7 @@ export default function NodoDetalle({ usuario, onLogout }) {
           </Link>
           <div style={styles.bannerRight}>
             <div style={styles.tempBadge}>Monitoreo de suelo</div>
-            <div style={styles.iconCircle} title="Alertas: integración pendiente">🔔</div>
+            <Notificaciones parcelaId={nodo?.parcela_id} style={styles.iconCircle} />
             <button
               type="button"
               style={{ ...styles.iconCircle, cursor: "pointer", border: "none", color: "#fff" }}
@@ -356,7 +380,7 @@ export default function NodoDetalle({ usuario, onLogout }) {
           {!sidebarAbierta && (
             <button type="button" onClick={() => setSidebarAbierta(true)} aria-label="Abrir menú" style={{ border: "none", background: "transparent", fontSize: 24, cursor: "pointer" }}>☰</button>
           )}
-          <div style={styles.mapIconBorder}><span style={{ fontSize: 24 }}>🗺️</span></div>
+          <button type="button" title="Ver mapa de la parcela" onClick={abrirMapa} style={{ ...styles.mapIconBorder, background: "#fff", cursor: "pointer" }}><span style={{ fontSize: 24 }}>🗺️</span></button>
           <div style={{ display: "flex", flexDirection: "column" }}>
             <h2 style={{ margin: 0, fontSize: 16 }}>
               {nodo ? `Parcela ${nodo.parcela_id}` : "Parcela"}
@@ -368,9 +392,7 @@ export default function NodoDetalle({ usuario, onLogout }) {
           <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 15, flexWrap: "wrap" }}>
             <div style={styles.selectGroupContainer}>
               <span style={{ fontSize: 10, color: "#777", marginBottom: 2 }}>Tipo de riego</span>
-              <select style={styles.select} value="no-configurado" disabled aria-label="Tipo de riego deshabilitado">
-                <option value="no-configurado">No configurado</option>
-              </select>
+              <TipoRiegoSelector parcelaId={nodo?.parcela_id} style={styles.select} />
             </div>
             <NodoToggle nombre="Control de riego" />
             <button type="button" onClick={() => setRecarga((anterior) => anterior + 1)} disabled={cargando} style={{ ...styles.logoutBtn, opacity: cargando ? 0.5 : 1 }}>
@@ -422,6 +444,7 @@ export default function NodoDetalle({ usuario, onLogout }) {
           )}
         </main>
       </div>
+      {mapaAbierto && <MapaParcela parcela={parcelaMapa || { id: nodo?.parcela_id, nombre: `Parcela ${nodo?.parcela_id}` }} onClose={() => setMapaAbierto(false)} />}
     </div>
   );
 }

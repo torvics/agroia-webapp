@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import logoAgroIA from "../assets/agroia-logo.png";
+import Notificaciones from "../components/AvisosPanel";
 
 const API_URL = (
-  import.meta.env.VITE_API_URL || "http://localhost:5000/api"
+  import.meta.env.VITE_API_URL || "http://localhost:5001/api"
 ).replace(/\/api\/?$/, "");
 
 const LIMITE_PAGINA = 100; // El backend admite un máximo de 100 registros por solicitud.
@@ -241,6 +242,8 @@ export default function Bitacoras({ usuario, onLogout }) {
   const nodosParcela = nodos.filter((n) =>
     String(n.parcela_id) === parcelaId && n.tipo !== "estacion"
   );
+  // Conservar nodos inactivos en filtros de historial, pero no en navegación.
+  const nodosMenuActivos = nodosParcela.filter((n) => n.estado === "activo");
   const identificadorPorId = useMemo(() =>
     new Map(nodos.map((n) => [String(n.id), n.identificador || `Nodo ${n.id}`])),
     [nodos]
@@ -313,7 +316,7 @@ export default function Bitacoras({ usuario, onLogout }) {
           </div>
           <div style={styles.sidebarSection}>
             <div style={styles.sidebarSectionTitle}>NODOS DE SUELO</div>
-            {nodosParcela.length ? nodosParcela.map((n) => (
+            {nodosMenuActivos.length ? nodosMenuActivos.map((n) => (
               <Link key={n.id} to={`/nodos/${n.id}`} style={styles.sidebarLink}>
                 {n.identificador || `Nodo ${n.id}`}
               </Link>
@@ -334,7 +337,7 @@ export default function Bitacoras({ usuario, onLogout }) {
           </Link>
           <div style={styles.bannerRight}>
             <div style={styles.tempBadge}>Registro de acciones</div>
-            <div style={styles.iconCircle}>🔔</div>
+            <Notificaciones parcelaId={parcelaId} style={styles.iconCircle} />
             <button type="button" style={{ ...styles.iconCircle, border: 0, color: "inherit", cursor: "pointer" }}
               onClick={() => setMenuAbierto((prev) => !prev)} aria-label="Abrir menú de usuario">👤</button>
             {menuAbierto && (

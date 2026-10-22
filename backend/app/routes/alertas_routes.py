@@ -1,4 +1,4 @@
-
+﻿
 import math
 import re
 
@@ -264,3 +264,27 @@ def guardar_config_alertas():
         ),
         "configuracion": serializar_config(config)
     }), 201 if nueva else 200
+
+# --- AgroIA: historial de alertas para notificaciones (solo lectura) ---
+from ..models import AlertaEnviada as AgroIAAlertaEnviada
+
+@alertas_bp.route("/historial", methods=["GET"])
+@jwt_required()
+def agroia_historial_alertas():
+    parcela_id = validar_parcela_id(request.args.get("parcela_id"))
+    if parcela_id is None:
+        return jsonify({"error": "parcela_id debe ser un entero positivo"}), 400
+    _, error = comprobar_acceso(parcela_id)
+    if error:
+        return error
+    registros = (AgroIAAlertaEnviada.query.filter_by(parcela_id=parcela_id)
+                 .order_by(AgroIAAlertaEnviada.fecha_deteccion.desc(), AgroIAAlertaEnviada.id.desc())
+                 .limit(30).all())
+    return jsonify({"alertas": [{
+        "id": r.id, "tipo_alerta": r.tipo_alerta, "nodo_id": r.nodo_id,
+        "valor_detectado": r.valor_detectado, "umbral": r.umbral,
+        "estado": r.estado,
+        "fecha_deteccion": r.fecha_deteccion.isoformat() + "Z" if r.fecha_deteccion else None
+    } for r in registros]}), 200
+# --- fin del historial de alertas ---
+
