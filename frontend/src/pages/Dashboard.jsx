@@ -8,6 +8,14 @@ import TemperaturaUbicacion from "../components/TemperaturaUbicacion";
 const API_URL = (
   import.meta.env.VITE_API_URL || "http://localhost:5000/api"
 ).replace(/\/api\/?$/, "");
+// Fecha local en formato YYYY-MM-DD, sin saltos por zona horaria.
+function fechaLocalDashboard(fecha) {
+  const anio = fecha.getFullYear();
+  const mes = String(fecha.getMonth() + 1).padStart(2, "0");
+  const dia = String(fecha.getDate()).padStart(2, "0");
+  return `${anio}-${mes}-${dia}`;
+}
+
 const DATOS_VACIOS = {
   clima: { temperatura: null },
   nodos: [],
@@ -176,23 +184,12 @@ function LineChart({ nodos = [] }) {
                   .join(" ")}
                 fill="none"
                 stroke={serie.color}
-                strokeWidth="3"
+                strokeWidth="1.8"
+                strokeLinecap="round"
                 strokeLinejoin="round"
+                vectorEffect="non-scaling-stroke"
               />
             )}
-            {serie.puntos.map((punto, indice) => (
-              <circle
-                key={`${punto.fecha}-${indice}`}
-                cx={posicionX(punto.fecha)}
-                cy={posicionY(punto.humedad)}
-                r="4"
-                fill={serie.color}
-              >
-                <title>
-                  {`${serie.nombre}: ${punto.humedad}% — ${formatoFecha(punto.fecha)}`}
-                </title>
-              </circle>
-            ))}
           </g>
         ))}
         <text
@@ -284,6 +281,15 @@ export default function Dashboard({ usuario, onLogout }) {
   const [errorHistorico, setErrorHistorico] = useState("");
   const [mapaAbierto, setMapaAbierto] = useState(false);
   const [recargaManual, setRecargaManual] = useState(0);
+  // Últimos siete días calendario por defecto, incluyendo el actual.
+  const [fechaDesdeDashboard, setFechaDesdeDashboard] = useState(() => {
+    const fecha = new Date();
+    fecha.setDate(fecha.getDate() - 6);
+    return fechaLocalDashboard(fecha);
+  });
+  const [fechaHastaDashboard, setFechaHastaDashboard] = useState(() =>
+    fechaLocalDashboard(new Date())
+  );
   const [nodoPendiente, setNodoPendiente] = useState(null);
   const [errorCambioNodo, setErrorCambioNodo] = useState("");
   const [mensajeCambioNodo, setMensajeCambioNodo] = useState("");
@@ -485,17 +491,21 @@ useEffect(() => {
   const controlador = new AbortController();
   setHistoricoNodos([]);
   setErrorHistorico("");
-  if (!parcelaId) {
+  if (
+    !parcelaId ||
+    !fechaDesdeDashboard ||
+    !fechaHastaDashboard ||
+    fechaDesdeDashboard > fechaHastaDashboard
+  ) {
     setCargandoHistorico(false);
     return () => controlador.abort();
   }
   async function cargarHistorico() {
     setCargandoHistorico(true);
     try {
-      const fin = new Date();
-      const inicio = new Date(
-        fin.getTime() - 6 * 24 * 60 * 60 * 1000
-      );
+      // El rango incluye ambos días completos en la zona horaria del navegador.
+      const inicio = new Date(`${fechaDesdeDashboard}T00:00:00`);
+      const fin = new Date(`${fechaHastaDashboard}T23:59:59.999`);
       const parametros = new URLSearchParams({
         parcela_id: String(parcelaId),
         inicio: inicio.toISOString(),
@@ -524,7 +534,7 @@ useEffect(() => {
   }
   cargarHistorico();
   return () => controlador.abort();
-}, [parcelaId, recargaManual]);
+}, [parcelaId, recargaManual, fechaDesdeDashboard, fechaHastaDashboard]);
   // Estado que controla si la barra está abierta o cerrada (empieza en false)
   const [sidebarAbierta, setSidebarAbierta] = useState(false);
   // Estado para el menú de usuario
@@ -775,6 +785,42 @@ const idsNodosActivos = new Set(
             <div style={styles.selectGroupContainer}>
               <span style={{ fontSize: 10, color: "#777", marginBottom: 2 }}>Tipo de Riego</span>
               <TipoRiegoSelector parcelaId={parcelaId} style={styles.select} />
+            </div>
+            {/* Filtro automático para el histórico. El calendario cambia la fecha sin botón Aplicar. */}
+            <div
+              style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}
+              aria-label="Filtrar histórico por fechas"
+            >
+              <label style={{ display: "flex", flexDirection: "column", gap: 3, fontSize: 11, color: "#666" }}>
+                Desde
+                <input
+                  type="date"
+                  value={fechaDesdeDashboard}
+                  max={fechaHastaDashboard}
+                  onChange={(e) => setFechaDesdeDashboard(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key !== "Tab" && e.key !== "Escape") e.preventDefault();
+                  }}
+                  onPaste={(e) => e.preventDefault()}
+                  onDrop={(e) => e.preventDefault()}
+                  style={{ width: 135, padding: "6px 7px", border: "1px solid #ccc", borderRadius: 6, background: "#fff" }}
+                />
+              </label>
+              <label style={{ display: "flex", flexDirection: "column", gap: 3, fontSize: 11, color: "#666" }}>
+                Hasta
+                <input
+                  type="date"
+                  value={fechaHastaDashboard}
+                  min={fechaDesdeDashboard}
+                  onChange={(e) => setFechaHastaDashboard(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key !== "Tab" && e.key !== "Escape") e.preventDefault();
+                  }}
+                  onPaste={(e) => e.preventDefault()}
+                  onDrop={(e) => e.preventDefault()}
+                  style={{ width: 135, padding: "6px 7px", border: "1px solid #ccc", borderRadius: 6, background: "#fff" }}
+                />
+              </label>
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 12, maxWidth: 480, overflowX: "auto", padding: "3px 0" }}>
               {nodosControl.map((nodo) => (

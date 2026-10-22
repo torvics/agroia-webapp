@@ -1,0 +1,13 @@
+/* Impedir editar manualmente los campos de fecha */
+input[type="date"]::-webkit-datetime-edit,
+input[type="datetime-local"]::-webkit-datetime-edit {
+  pointer-events: none;
+  user-select: none;
+}
+
+/* Permitir usar el icono del calendario */
+input[type="date"]::-webkit-calendar-picker-indicator,
+input[type="datetime-local"]::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  pointer-events: auto;
+}
