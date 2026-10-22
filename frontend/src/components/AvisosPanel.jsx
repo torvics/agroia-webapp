@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { leerPreferenciasAvisos, tiempoLectura } from './avisosUtils';
 
-const API_URL = (import.meta.env.VITE_API_URL || 'http://localhost:5001/api').replace(/\/api\/?$/, '');
+const API_URL = (import.meta.env.VITE_API_URL || 'http://localhost:5000/api').replace(/\/api\/?$/, '');
 async function consultar(ruta) {
   const token = localStorage.getItem('access_token') || localStorage.getItem('token');
   if (!token) throw new Error('La sesión expiró. Vuelve a iniciar sesión.');

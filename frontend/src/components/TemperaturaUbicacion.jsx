@@ -38,7 +38,11 @@ export default function TemperaturaUbicacion({ style = {} }) {
           current: "temperature_2m",
           forecast_days: "1",
         });
-        const temporizador = setTimeout(() => peticion.abort(), 12000);
+        let tiempoAgotado = false;
+        const temporizador = setTimeout(() => {
+          tiempoAgotado = true;
+          peticion.abort();
+        }, 12000);
         try {
           const respuesta = await fetch(`https://api.open-meteo.com/v1/forecast?${parametros}`, {
             signal: peticion.signal,
@@ -54,8 +58,15 @@ export default function TemperaturaUbicacion({ style = {} }) {
             setClima({ temperatura, fecha: new Date(), error: "", consultando: false });
           }
         } catch (error) {
-          if (montado.current && !peticion.signal.aborted) {
-            setClima({ temperatura: null, fecha: null, error: error.message || "No se pudo consultar el clima.", consultando: false });
+          if (montado.current && controlador.current === peticion && (!peticion.signal.aborted || tiempoAgotado)) {
+            setClima({
+              temperatura: null,
+              fecha: null,
+              error: tiempoAgotado
+                ? "La consulta del clima tardó demasiado. Pulsa aquí para reintentar."
+                : error.message || "No se pudo consultar el clima.",
+              consultando: false,
+            });
           }
         } finally {
           clearTimeout(temporizador);

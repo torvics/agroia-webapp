@@ -30,7 +30,9 @@ def agroia_registrar_usuario():
     if get_jwt().get("rol") != "admin":
         return jsonify({"error": "Solo un administrador puede registrar cuentas."}), 403
 
-    datos = agroia_request.get_json(silent=True) or {}
+    datos = agroia_request.get_json(silent=True)
+    if not isinstance(datos, dict):
+        return jsonify({"error": "Se requiere un objeto JSON válido."}), 400
     nombre = str(datos.get("nombre") or "").strip()
     correo = str(datos.get("correo") or "").strip().lower()
     password = datos.get("password")
@@ -38,7 +40,7 @@ def agroia_registrar_usuario():
 
     if len(nombre) < 2 or len(nombre) > 100:
         return jsonify({"error": "El nombre debe tener entre 2 y 100 caracteres."}), 400
-    if len(correo) > 255 or not correo or "@" not in correo or " " in correo:
+    if len(correo) > 150 or not correo or "@" not in correo or " " in correo:
         return jsonify({"error": "Introduce un correo válido."}), 400
     if not isinstance(password, str) or not (8 <= len(password) <= 128):
         return jsonify({"error": "La contraseña debe tener entre 8 y 128 caracteres."}), 400
@@ -78,7 +80,9 @@ def editar_usuario_gestion(usuario_id):
     usuario = db_gestion.session.get(Usuario, usuario_id)
     if not usuario:
         return jsonify({"error": "Usuario no encontrado."}), 404
-    datos = request_gestion.get_json(silent=True) or {}
+    datos = request_gestion.get_json(silent=True)
+    if not isinstance(datos, dict):
+        return jsonify({"error": "Se requiere un objeto JSON válido."}), 400
     permitidos = {"nombre", "correo", "rol", "activo"}
     if not datos or set(datos) - permitidos:
         return jsonify({"error": "Campos inválidos. No se permite cambiar contraseñas desde este formulario."}), 400
@@ -88,7 +92,7 @@ def editar_usuario_gestion(usuario_id):
     activo = datos.get("activo",usuario.activo)
     if not isinstance(nombre,str) or not (2 <= len(nombre.strip()) <= 100):
         return jsonify({"error": "Nombre inválido."}), 400
-    if not isinstance(correo,str) or not correo.strip() or "@" not in correo or " " in correo or len(correo.strip()) > 255:
+    if not isinstance(correo,str) or not correo.strip() or "@" not in correo or " " in correo or len(correo.strip()) > 150:
         return jsonify({"error": "Correo inválido."}), 400
     if rol not in ("admin","agricultor") or not isinstance(activo,bool):
         return jsonify({"error": "Rol o estado inválido."}), 400

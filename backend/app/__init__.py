@@ -9,7 +9,7 @@ from .config import Config
 # MODELOS
 # ======================================
 from . import models  # noqa: F401
-from .models import TokenRevocado
+from .models import TokenRevocado, Usuario
 
 # ======================================
 # RUTAS DEL BACKEND
@@ -73,8 +73,27 @@ def create_app():
             .first()
         )
 
-        # True significa que el JWT fue revocado.
-        return token is not None
+        if token is not None:
+            return True
+
+        try:
+            usuario_id = int(jwt_payload.get("sub", ""))
+        except (TypeError, ValueError):
+            return True
+
+        # Usuario.id es un INTEGER de MySQL; rechazar identidades inválidas
+        # antes de pasarlas al controlador de la base de datos.
+        if not 1 <= usuario_id <= 2**31 - 1:
+            return True
+
+        usuario = db.session.get(Usuario, usuario_id)
+
+        # Los cambios de estado o rol deben aplicarse también a sesiones abiertas.
+        return (
+            usuario is None
+            or not usuario.activo
+            or usuario.rol != jwt_payload.get("rol")
+        )
 
     # ======================================
     # AUTENTICACION Y USUARIOS

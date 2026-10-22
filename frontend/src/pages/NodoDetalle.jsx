@@ -8,7 +8,7 @@ import TipoRiegoSelector from "../components/TipoRiegoSelector";
 // La variable de Vite puede contener /api al final.
 // Se normaliza para construir siempre las rutas /api/...
 const API_URL = (
-  import.meta.env.VITE_API_URL || "http://localhost:5001/api"
+  import.meta.env.VITE_API_URL || "http://localhost:5000/api"
 ).replace(/\/api\/?$/, "");
 
 function formatearFecha(fecha) {

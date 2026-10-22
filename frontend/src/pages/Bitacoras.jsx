@@ -4,7 +4,7 @@ import logoAgroIA from "../assets/agroia-logo.png";
 import Notificaciones from "../components/AvisosPanel";
 
 const API_URL = (
-  import.meta.env.VITE_API_URL || "http://localhost:5001/api"
+  import.meta.env.VITE_API_URL || "http://localhost:5000/api"
 ).replace(/\/api\/?$/, "");
 
 const LIMITE_PAGINA = 100; // El backend admite un máximo de 100 registros por solicitud.

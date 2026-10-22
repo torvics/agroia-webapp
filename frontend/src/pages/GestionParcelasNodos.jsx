@@ -4,7 +4,7 @@ import MapaParcela from '../components/MapaParcela';
 import logoAgroIA from '../assets/agroia-logo.png';
 import TipoRiegoSelector from '../components/TipoRiegoSelector';
 
-const API = (import.meta.env.VITE_API_URL || 'http://localhost:5001/api').replace(/\/api\/?$/, '') + '/api';
+const API = (import.meta.env.VITE_API_URL || 'http://localhost:5000/api').replace(/\/api\/?$/, '') + '/api';
 const normalizar = respuesta => Array.isArray(respuesta) ? respuesta : respuesta.parcelas ?? [];
 async function api(ruta, { method = 'GET', body } = {}) {
   const token = localStorage.getItem('access_token') || localStorage.getItem('token');

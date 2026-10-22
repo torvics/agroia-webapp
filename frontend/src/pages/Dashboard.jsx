@@ -6,7 +6,7 @@ import MapaParcela from "../components/MapaParcela";
 import TipoRiegoSelector from "../components/TipoRiegoSelector";
 import TemperaturaUbicacion from "../components/TemperaturaUbicacion";
 const API_URL = (
-  import.meta.env.VITE_API_URL || "http://localhost:5001/api"
+  import.meta.env.VITE_API_URL || "http://localhost:5000/api"
 ).replace(/\/api\/?$/, "");
 const DATOS_VACIOS = {
   clima: { temperatura: null },
@@ -297,6 +297,7 @@ export default function Dashboard({ usuario, onLogout }) {
         localStorage.getItem("token");
       if (!token) {
         setErrorNodos("No hay una sesión activa.");
+        setNodosRegistrados([]);
         setCargandoNodos(false);
         return;
       }
@@ -335,7 +336,7 @@ export default function Dashboard({ usuario, onLogout }) {
     };
     cargarNodosRegistrados();
     return () => controlador.abort();
-  }, []);
+  }, [recargaManual]);
   // Cargar el perfil y las parcelas al entrar al dashboard.
   useEffect(() => {
     const controlador = new AbortController();
@@ -387,9 +388,9 @@ export default function Dashboard({ usuario, onLogout }) {
         ]);
         if (controlador.signal.aborted) return;
         const estacion = lecturas.estacion ?? {};
-        
+
         const nodos = (lecturas.nodos ?? [])
-          .filter(nodo => nodosRegistrados.length === 0 || nodosRegistrados.some(r => Number(r.id) === Number(nodo.nodo_id) && r.estado === "activo" && r.tipo === "sensor_suelo"))
+          .filter(nodo => nodosRegistrados.some(r => Number(r.id) === Number(nodo.nodo_id) && r.estado === "activo" && r.tipo === "sensor_suelo"))
           .map((nodo, index) => {
           // Obtener la fecha de la ultima medicion.
           const fechaMs = nodo.fecha_lectura
@@ -533,7 +534,7 @@ useEffect(() => {
 
   // Enlaces desde MySQL de los sensores de suelo de la parcela seleccionada.
   // GET /api/nodos respeta los permisos del usuario en Flask.
-  
+
   const nodosParcela = nodosRegistrados.filter(
     (nodo) =>
       parcelaId !== null &&
@@ -832,6 +833,10 @@ const idsNodosActivos = new Set(
                 cargandoNodos ? (
                   <p style={{ textAlign: "center", color: "#777" }}>
                     Verificando nodos activos...
+                  </p>
+                ) : errorNodos ? (
+                  <p role="alert" style={{ textAlign: "center", color: "#d63b3b" }}>
+                    No se pudo verificar qué nodos están activos: {errorNodos}
                   </p>
                 ) : idsNodosActivos.size === 0 ? (
                   <p style={{ textAlign: "center", color: "#777" }}>

@@ -287,4 +287,3 @@ def agroia_historial_alertas():
         "fecha_deteccion": r.fecha_deteccion.isoformat() + "Z" if r.fecha_deteccion else None
     } for r in registros]}), 200
 # --- fin del historial de alertas ---
-
