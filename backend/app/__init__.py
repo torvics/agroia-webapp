@@ -10,6 +10,8 @@ from .config import Config
 # ======================================
 from . import models  # noqa: F401
 from .models import TokenRevocado, Usuario
+from .utils.password_reset import version_credencial
+import hmac
 
 # ======================================
 # RUTAS DEL BACKEND
@@ -93,6 +95,12 @@ def create_app():
             usuario is None
             or not usuario.activo
             or usuario.rol != jwt_payload.get("rol")
+            # Se invalidan los JWT de antes de desplegar esta mejora y
+            # todos los JWT previos a cualquier cambio de contraseña.
+            or not hmac.compare_digest(
+                str(jwt_payload.get("credencial_ver", "")),
+                version_credencial(usuario),
+            )
         )
 
     # ======================================

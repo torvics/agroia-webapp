@@ -241,3 +241,57 @@ def procesar_envio_alerta(alerta_id):
     db.session.commit()
 
     return "enviada"
+
+
+
+def enviar_correo_recuperacion(destinatario, enlace):
+    """Envía un enlace de recuperación con la configuración SMTP existente.
+
+    Este envío no modifica registros de alertas ni los procesa el worker.
+    """
+    if (
+        not isinstance(destinatario, str)
+        or not destinatario.strip()
+        or "\n" in destinatario
+        or "\r" in destinatario
+    ):
+        raise ValueError("Destinatario no válido")
+    if not isinstance(enlace, str) or not enlace.startswith(("http://", "https://")):
+        raise ValueError("Enlace no válido")
+
+    host = os.getenv("SMTP_HOST", "").strip()
+    seguridad = os.getenv("SMTP_SECURITY", "starttls").strip().lower()
+    puerto = int(os.getenv("SMTP_PORT", "465" if seguridad == "ssl" else "587"))
+    usuario = os.getenv("SMTP_USER", "").strip()
+    password = os.getenv("SMTP_PASSWORD", "")
+    remitente = os.getenv("SMTP_FROM", usuario).strip()
+    if seguridad not in ("ssl", "starttls"):
+        raise ValueError("SMTP_SECURITY debe ser ssl o starttls")
+    if not all((host, usuario, password, remitente)):
+        raise ValueError("Configuración SMTP incompleta")
+
+    mensaje = EmailMessage()
+    mensaje["From"] = remitente
+    mensaje["To"] = destinatario.strip()
+    mensaje["Subject"] = "[AgroIA] Restablecer contraseña"
+    mensaje.set_content(
+        "Se solicitó un cambio de contraseña para tu cuenta de AgroIA.\n\n"
+        "Abre este enlace para establecer una contraseña nueva (válido 20 minutos):\n"
+        f"{enlace}\n\n"
+        "Si no solicitaste este cambio, puedes ignorar este correo.\n"
+        "El enlace dejará de funcionar cuando se cambie la contraseña.\n"
+        "Nunca compartas este enlace con otras personas."
+    )
+
+    contexto = ssl.create_default_context()
+    if seguridad == "ssl":
+        with smtplib.SMTP_SSL(host, puerto, timeout=10, context=contexto) as servidor:
+            servidor.login(usuario, password)
+            servidor.send_message(mensaje)
+    else:
+        with smtplib.SMTP(host, puerto, timeout=10) as servidor:
+            servidor.ehlo()
+            servidor.starttls(context=contexto)
+            servidor.ehlo()
+            servidor.login(usuario, password)
+            servidor.send_message(mensaje)

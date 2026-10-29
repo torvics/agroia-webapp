@@ -834,7 +834,6 @@ const idsNodosActivos = new Set(
             </div>
             <Link to="/gestion" style={{ ...styles.logoutBtn, textDecoration:"none", display:"inline-flex",alignItems:"center" }}>Gestionar</Link>
             <button type="button" onClick={() => setRecargaManual(x => x + 1)} style={styles.logoutBtn} disabled={cargandoDatos}>↻ Actualizar</button>
-            <button onClick={handleLogout} style={styles.logoutBtn}>Salir</button>
           </div>
         </div>
         {errorCambioNodo && (

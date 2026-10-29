@@ -8,7 +8,7 @@ import Dashboard from "./pages/Dashboard";
 import ConfigAdmin from "./pages/ConfigAdmin";
 import ConfigCuenta from "./pages/ConfigCuenta";
 import ConfigGeneral from "./pages/ConfigGeneral";
-import RecuperarContra from "./components/recuperarcontra";
+import RestablecerPassword from "./pages/RestablecerPassword";
 import Bitacoras from "./pages/Bitacoras";
 import NodoDetalle from "./pages/NodoDetalle";
 import GestionParcelasNodos from "./pages/GestionParcelasNodos";
@@ -149,6 +149,11 @@ function App() {
           }
         />
 
+        <Route
+          path="/restablecer-password"
+          element={<RestablecerPassword />}
+        />
+        {/* Mantener compatibilidad con enlaces anteriores. */}
         <Route
           path="/recuperar-password"
           element={<Navigate to="/login" replace />}

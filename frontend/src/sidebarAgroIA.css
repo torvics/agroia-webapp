@@ -1,0 +1,69 @@
+/* AgroIA — tema compartido del menú lateral.
+   Compatible con las barras laterales de Dashboard y ConfigCuenta.
+   Los asides adicionales pueden utilizar className="agroia-sidebar".
+*/
+
+:root {
+  --agroia-menu-fondo: #F4FDE8;
+  --agroia-menu-verde: #2F5413;
+  --agroia-menu-acento: #7A9D54;
+  --agroia-menu-hover: #E1EFD1;
+  --agroia-menu-separador: #C9DDB7;
+}
+
+:is(.agroia-sidebar, aside:has(a[href="/dashboard"])) {
+  background-color: var(--agroia-menu-fondo) !important;
+  color: var(--agroia-menu-verde) !important;
+  border-right-color: var(--agroia-menu-separador) !important;
+  box-shadow: 3px 0 14px rgba(47, 84, 19, 0.08);
+}
+
+:is(.agroia-sidebar, aside:has(a[href="/dashboard"])) h2 {
+  color: var(--agroia-menu-verde) !important;
+}
+
+:is(.agroia-sidebar, aside:has(a[href="/dashboard"])) span[style*="cursor: pointer"] {
+  color: var(--agroia-menu-verde) !important;
+}
+
+:is(.agroia-sidebar, aside:has(a[href="/dashboard"])) [style*="letter-spacing"] {
+  color: #577F3D !important;
+}
+
+/* Separadores: se conserva la estructura y espaciado originales. */
+:is(.agroia-sidebar, aside:has(a[href="/dashboard"])) [style*="border-bottom"] {
+  border-bottom-color: var(--agroia-menu-separador) !important;
+}
+
+:is(.agroia-sidebar, aside:has(a[href="/dashboard"])) [style*="border-top"] {
+  border-top-color: var(--agroia-menu-separador) !important;
+}
+
+:is(.agroia-sidebar, aside:has(a[href="/dashboard"])) a {
+  color: var(--agroia-menu-verde) !important;
+  border-radius: 8px;
+  margin: 2px 10px;
+  transition: background-color .16s ease, color .16s ease;
+}
+
+:is(.agroia-sidebar, aside:has(a[href="/dashboard"])) a:hover {
+  background-color: var(--agroia-menu-hover) !important;
+  color: var(--agroia-menu-verde) !important;
+}
+
+/* En los componentes existentes, el enlace activo lleva un borde izquierdo. */
+:is(.agroia-sidebar, aside:has(a[href="/dashboard"])) a[style*="border-left"]:not([style*="transparent"]) {
+  background-color: var(--agroia-menu-acento) !important;
+  border-left-color: var(--agroia-menu-verde) !important;
+  color: #fff !important;
+}
+
+:is(.agroia-sidebar, aside:has(a[href="/dashboard"])) a[style*="border-left"]:not([style*="transparent"]):hover {
+  background-color: #658D45 !important;
+  color: #fff !important;
+}
+
+:is(.agroia-sidebar, aside:has(a[href="/dashboard"])) a:focus-visible {
+  outline: 2px solid var(--agroia-menu-verde);
+  outline-offset: 2px;
+}
