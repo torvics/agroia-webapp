@@ -15,7 +15,8 @@ def listar_usuarios():
     usuarios = Usuario.query.order_by(Usuario.id).all()
     return jsonify([
         {"id": u.id, "nombre": u.nombre, "correo": u.correo,
-         "rol": u.rol, "activo": u.activo}
+         "rol": u.rol, "activo": u.activo,
+         "correo_confirmado": u.correo_confirmado}
         for u in usuarios
     ]), 200
 
@@ -23,6 +24,10 @@ def listar_usuarios():
 from flask import request as agroia_request
 from ..extensions import db as agroia_db
 from sqlalchemy.exc import IntegrityError as AgroIAIntegrityError
+from flask import current_app
+from urllib.parse import quote
+from ..services.correo_service import enviar_correo_confirmacion
+from ..utils.email_confirmation import crear_token_confirmacion
 
 @usuarios_bp.route("/usuarios", methods=["POST"])
 @jwt_required()
@@ -49,19 +54,41 @@ def agroia_registrar_usuario():
     if Usuario.query.filter_by(correo=correo).first():
         return jsonify({"error": "Ya existe una cuenta con ese correo."}), 409
 
-    nuevo = Usuario(nombre=nombre, correo=correo, rol=rol, activo=True)
+    nuevo = Usuario(
+        nombre=nombre,
+        correo=correo,
+        rol=rol,
+        activo=True,
+        correo_confirmado=(rol != "agricultor"),
+    )
     nuevo.set_password(password)
     agroia_db.session.add(nuevo)
     try:
+        agroia_db.session.flush()
+        if rol == "agricultor":
+            enlace = (
+                f"{current_app.config['BACKEND_ORIGIN'].rstrip('/')}"
+                f"/api/auth/confirmar-correo?token="
+                f"{quote(crear_token_confirmacion(nuevo), safe='')}"
+            )
+            enviar_correo_confirmacion(nuevo.correo, enlace)
         agroia_db.session.commit()
+    except ValueError as error:
+        agroia_db.session.rollback()
+        current_app.logger.exception("No se pudo enviar la confirmación de correo")
+        return jsonify({"error": str(error)}), 503
     except AgroIAIntegrityError:
         agroia_db.session.rollback()
         return jsonify({"error": "La cuenta ya existe o los datos no son válidos."}), 409
     except Exception:
         agroia_db.session.rollback()
-        raise
+        current_app.logger.exception("Error al crear la cuenta")
+        return jsonify({
+            "error": "La cuenta no pudo crearse porque no se pudo enviar el correo de confirmación."
+        }), 503
     return jsonify({"id": nuevo.id, "nombre": nuevo.nombre, "correo": nuevo.correo,
-                    "rol": nuevo.rol, "activo": nuevo.activo}), 201
+                    "rol": nuevo.rol, "activo": nuevo.activo,
+                    "correo_confirmado": nuevo.correo_confirmado}), 201
 # --- fin de alta de usuarios ---
 
 
@@ -110,4 +137,11 @@ def editar_usuario_gestion(usuario_id):
     except ErrorIntegridadGestion:
         db_gestion.session.rollback()
         return jsonify({"error": "El correo ya está registrado o no es válido."}), 409
-    return jsonify({"id":usuario.id,"nombre":usuario.nombre,"correo":usuario.correo,"rol":usuario.rol,"activo":usuario.activo}),200
+    return jsonify({
+        "id": usuario.id,
+        "nombre": usuario.nombre,
+        "correo": usuario.correo,
+        "rol": usuario.rol,
+        "activo": usuario.activo,
+        "correo_confirmado": usuario.correo_confirmado,
+    }), 200

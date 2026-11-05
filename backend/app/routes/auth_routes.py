@@ -1,4 +1,4 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, redirect
 from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity, get_jwt
 import re
 import threading
@@ -7,7 +7,10 @@ from urllib.parse import quote
 from sqlalchemy import update
 from werkzeug.security import generate_password_hash
 
-from ..services.correo_service import enviar_correo_recuperacion
+from ..services.correo_service import (
+    enviar_correo_confirmacion,
+    enviar_correo_recuperacion,
+)
 from ..utils.password_reset import (
     crear_token_recuperacion,
     obtener_id_token,
@@ -23,6 +26,10 @@ from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 from ..extensions import db
 from ..models import TokenRevocado
+from ..utils.email_confirmation import (
+    crear_token_confirmacion,
+    obtener_datos_confirmacion,
+)
 
 auth_bp = Blueprint("auth", __name__)
 
@@ -36,6 +43,8 @@ def login():
     usuario = Usuario.query.filter_by(correo=correo, activo=True).first()
     if not usuario or not usuario.check_password(password):
         return jsonify({"error": "credenciales inválidas"}), 401
+    if not usuario.correo_confirmado:
+        return jsonify({"error": "El correo no se ha confirmado todavía"}), 403
 
     token = create_access_token(
         identity=str(usuario.id),
@@ -46,6 +55,30 @@ def login():
         "rol": usuario.rol,
         "nombre": usuario.nombre,
     }), 200
+
+
+@auth_bp.route("/confirmar-correo", methods=["GET"])
+def confirmar_correo():
+    token = request.args.get("token", "")
+    datos = obtener_datos_confirmacion(
+        token,
+        current_app.config["EMAIL_CONFIRMATION_MAX_AGE"],
+    )
+    estado = "invalido"
+
+    if isinstance(datos, dict) and isinstance(datos.get("id"), int):
+        usuario = db.session.get(Usuario, datos["id"])
+        if (
+            usuario is not None
+            and usuario.activo
+            and usuario.correo == datos.get("correo")
+        ):
+            usuario.correo_confirmado = True
+            db.session.commit()
+            estado = "confirmado"
+
+    destino = current_app.config["FRONTEND_ORIGIN"].rstrip("/")
+    return redirect(f"{destino}/confirmar-correo?estado={estado}")
 
 
 @auth_bp.route("/perfil", methods=["GET"])

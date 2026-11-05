@@ -629,13 +629,19 @@ export default function ConfigAdmin({ onLogout }) {
                         <td style={styles.td}>
                           <span
                             style={{
-                              color: user.activo
-                                ? "#4f863b"
-                                : "#d32f2f",
+                              color: !user.activo
+                                ? "#d32f2f"
+                                : user.correo_confirmado === false
+                                ? "#b26a00"
+                                : "#4f863b",
                               fontWeight: "bold",
                             }}
                           >
-                            {user.activo ? "Activo" : "Inactivo"}
+                            {!user.activo
+                              ? "Inactivo"
+                              : user.correo_confirmado === false
+                              ? "Pendiente de confirmar"
+                              : "Activo"}
                           </span>
                         </td>
                         <td style={styles.td}><button type="button" style={{...styles.btnDeshabilitado,opacity:1,cursor:'pointer',background:'#7A9D54',color:'#fff'}} onClick={()=>{setEditandoUsuario(user.id);setEdicionUsuario({nombre:user.nombre,correo:user.correo,rol:user.rol,activo:Boolean(user.activo)});setErrorEdicion('');setOkEdicion('');}}>Editar</button></td>
@@ -665,7 +671,7 @@ export default function ConfigAdmin({ onLogout }) {
                 <label>Correo <input required type="email" maxLength={255} value={nuevoUsuario.correo} onChange={e => setNuevoUsuario(p => ({ ...p, correo: e.target.value }))} style={{ padding: 9, width: "100%", boxSizing: "border-box" }} /></label>
                 <label>Rol <select value={nuevoUsuario.rol} onChange={e => setNuevoUsuario(p => ({ ...p, rol: e.target.value }))} style={{ padding: 9, display: "block", width: "100%" }}><option value="agricultor">Agricultor</option><option value="admin">Administrador</option></select></label>
                 <label>Contraseña inicial <input required type="password" minLength={8} maxLength={128} autoComplete="new-password" value={nuevoUsuario.password} onChange={e => setNuevoUsuario(p => ({ ...p, password: e.target.value }))} style={{ padding: 9, width: "100%", boxSizing: "border-box" }} /></label>
-                <p style={{ fontSize: 12, color: "#666" }}>Esta acción crea una cuenta real en MySQL. No se envían correos.</p>
+                <p style={{ fontSize: 12, color: "#666" }}>El agricultor recibirá un correo de confirmación y no podrá iniciar sesión hasta confirmarlo.</p>
                 <div style={{ display: "flex", gap: 10 }}><button type="submit" disabled={creandoUsuario} style={styles.logoutBtn}>{creandoUsuario ? "Creando..." : "Crear cuenta"}</button><button type="button" onClick={() => setAltaAbierta(false)} style={styles.logoutBtn}>Cancelar</button></div>
               </form>
             )}

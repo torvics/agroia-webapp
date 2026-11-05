@@ -295,3 +295,52 @@ def enviar_correo_recuperacion(destinatario, enlace):
             servidor.ehlo()
             servidor.login(usuario, password)
             servidor.send_message(mensaje)
+
+
+def enviar_correo_confirmacion(destinatario, enlace):
+    if (
+        not isinstance(destinatario, str)
+        or not destinatario.strip()
+        or "\n" in destinatario
+        or "\r" in destinatario
+    ):
+        raise ValueError("Destinatario no válido")
+    if not isinstance(enlace, str) or not enlace.startswith(("http://", "https://")):
+        raise ValueError("Enlace no válido")
+
+    host = os.getenv("SMTP_HOST", "").strip()
+    seguridad = os.getenv("SMTP_SECURITY", "starttls").strip().lower()
+    puerto = int(os.getenv("SMTP_PORT", "465" if seguridad == "ssl" else "587"))
+    usuario = os.getenv("SMTP_USER", "").strip()
+    password = os.getenv("SMTP_PASSWORD", "")
+    remitente = os.getenv("SMTP_FROM", usuario).strip()
+    if seguridad not in ("ssl", "starttls"):
+        raise ValueError("SMTP_SECURITY debe ser ssl o starttls")
+    if not all((host, usuario, password, remitente)):
+        raise ValueError("Configuración SMTP incompleta")
+
+    mensaje = EmailMessage()
+    mensaje["From"] = remitente
+    mensaje["To"] = destinatario.strip()
+    mensaje["Subject"] = "[AgroIA] Confirma tu correo electrónico"
+    mensaje.set_content(
+        "Hola,\n\n"
+        "Confirma tu correo electrónico para activar tu cuenta de AgroIA "
+        "y poder iniciar sesión:\n\n"
+        f"{enlace}\n\n"
+        "Este enlace caduca en 24 horas. Si no reconoces esta cuenta, "
+        "puedes ignorar este mensaje."
+    )
+
+    contexto = ssl.create_default_context()
+    if seguridad == "ssl":
+        with smtplib.SMTP_SSL(host, puerto, timeout=10, context=contexto) as servidor:
+            servidor.login(usuario, password)
+            servidor.send_message(mensaje)
+    else:
+        with smtplib.SMTP(host, puerto, timeout=10) as servidor:
+            servidor.ehlo()
+            servidor.starttls(context=contexto)
+            servidor.ehlo()
+            servidor.login(usuario, password)
+            servidor.send_message(mensaje)

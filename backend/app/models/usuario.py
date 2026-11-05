@@ -13,6 +13,7 @@ class Usuario(db.Model):
     rol = db.Column(db.Enum("admin", "agricultor", name="rol_enum"), nullable=False)
     fecha_creacion = db.Column(db.DateTime, default=datetime.datetime.utcnow)
     activo = db.Column(db.Boolean, default=True)
+    correo_confirmado = db.Column(db.Boolean, nullable=False, default=True)
 
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
