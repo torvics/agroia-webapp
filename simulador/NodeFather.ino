@@ -10,23 +10,23 @@
 
 #define LED_BUILTIN 2
 
-char ssid[] = "INFINITUM509E_2.4";
-char pass[] = "RSXYV5STHd";
+char ssid[] = "Megacable_2.4G_4BAF";
+char pass[] = "EFEP7NPc";
 
 // ── Backend web (Flask) ──────────────────────────────────
 // IP de la PC donde corre Docker, en la MISMA red WiFi que el ESP32.
 // OJO: no uses localhost, desde el ESP32 "localhost" es el propio ESP32.
-#define API_BASE_URL  "http://192.168.1.137:5000/api"
+#define API_BASE_URL  "http://192.168.1.17:5000/api"
 // api_key del nodo "estacion" (la imprime scripts/seed.py).
 // Si prefieres, muévela a secrets.h para no subirla a git.
-#define API_KEY       "b9f1845bc52dc08dd0a1ffc31e4ea5534720a70955fce7fe"
+#define API_KEY       "d10e7f4332da926e764ce713f624ea0eb27bcf2f1da24754"
 #define INTERVALO_POLL_COMANDOS_MS 5000UL   // cada cuánto pregunta por comandos
 
 #define LORA_SS   5
 #define LORA_RST  14
 #define LORA_DIO0 4
 
-#define NUM_NODOS 4
+#define NUM_NODOS 6
 
 #define PIN_RELAY_NODO1 12
 #define PIN_RELAY_NODO2 13

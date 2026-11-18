@@ -47,9 +47,14 @@ def create_app():
     # ======================================
     # CONFIGURACION CORS
     # ======================================
+    origenes_permitidos = [
+        origen.strip().rstrip("/")
+        for origen in str(app.config.get("FRONTEND_ORIGIN", "")).split(",")
+        if origen.strip()
+    ]
     CORS(
         app,
-        origins=[app.config["FRONTEND_ORIGIN"]],
+        origins=origenes_permitidos,
         supports_credentials=True
     )
 

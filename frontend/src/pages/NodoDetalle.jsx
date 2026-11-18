@@ -174,9 +174,8 @@ export default function NodoDetalle({ usuario, onLogout }) {
       setError("");
       setErrorActual("");
       setErrorHistorial("");
-      setNodo(null);
-      setMedicion(null);
-      setLecturas([]);
+      // Ya no vaciamos el nodo, medicion ni lecturas aquí para que la pantalla
+      // mantenga los datos visibles mientras carga el nuevo nodo (evita parpadeos).
 
       const token = localStorage.getItem("access_token") || localStorage.getItem("token");
       if (!token) {
@@ -186,7 +185,6 @@ export default function NodoDetalle({ usuario, onLogout }) {
       }
 
       try {
-        // La lista ya está filtrada por el backend según el rol del usuario.
         const lista = await consultar("/api/nodos", token);
         if (!Array.isArray(lista)) throw new Error("Formato de nodos no válido.");
         if (controlador.signal.aborted) return;
@@ -207,10 +205,9 @@ export default function NodoDetalle({ usuario, onLogout }) {
           parcela_id: String(seleccionado.parcela_id),
           inicio: inicio.toISOString(),
           fin: ahora.toISOString(),
-          intervalo: "raw",
+          intervalo: "15m",
         });
 
-        // Se consultan por separado: el fallo del histórico no oculta la lectura actual.
         const [resultadoActual, resultadoHistorico] = await Promise.allSettled([
           consultar(`/api/sensores/actual?parcela_id=${seleccionado.parcela_id}`, token),
           consultar(`/api/sensores/historico?${parametros.toString()}`, token),
@@ -248,7 +245,12 @@ export default function NodoDetalle({ usuario, onLogout }) {
           setErrorHistorial(resultadoHistorico.reason?.message || "No se pudo consultar el historial.");
         }
       } catch (e) {
-        if (!controlador.signal.aborted) setError(e.message || "Error al cargar el nodo.");
+        if (!controlador.signal.aborted) {
+          setError(e.message || "Error al cargar el nodo.");
+          setNodo(null);
+          setMedicion(null);
+          setLecturas([]);
+        }
       } finally {
         if (!controlador.signal.aborted) setCargando(false);
       }
@@ -271,6 +273,11 @@ export default function NodoDetalle({ usuario, onLogout }) {
       setParcelaMapa(lista.find(p => Number(p.id) === Number(nodo?.parcela_id)) || null);
     } catch { /* El mapa mostrará la parcela sin coordenadas si no es posible consultarlas. */ }
   };
+
+  // Obtenemos la parcela objetivo en base a la lista de nodos y el ID de la URL
+  // para que los círculos se mantengan en pantalla incluso si el "nodo" está recargando.
+  const nodoObjetivo = nodos.find(n => String(n.id) === String(nodoId));
+  const parcelaActual = nodoObjetivo?.parcela_id || nodo?.parcela_id;
 
   return (
     <div style={styles.app}>
@@ -302,8 +309,8 @@ export default function NodoDetalle({ usuario, onLogout }) {
                 (item) =>
                   item.tipo !== "estacion" &&
                   item.estado === "activo" &&
-                  nodo !== null &&
-                  Number(item.parcela_id) === Number(nodo.parcela_id)
+                  parcelaActual !== undefined &&
+                  Number(item.parcela_id) === Number(parcelaActual)
               )
               .map((item) => (
                 <Link
@@ -321,8 +328,8 @@ export default function NodoDetalle({ usuario, onLogout }) {
             {!nodos.some((item) =>
               item.tipo !== "estacion" &&
               item.estado === "activo" &&
-              nodo !== null &&
-              Number(item.parcela_id) === Number(nodo.parcela_id)
+              parcelaActual !== undefined &&
+              Number(item.parcela_id) === Number(parcelaActual)
             ) && (
               <span style={{ padding: "12px 20px", fontSize: 13, color: "#666" }}>Sin nodos disponibles</span>
             )}
@@ -348,30 +355,37 @@ export default function NodoDetalle({ usuario, onLogout }) {
               onClick={() => setMenuAbierto((anterior) => !anterior)}
             >👤</button>
             {menuAbierto && (
-              <div style={styles.userMenu}>
-                <div style={styles.userMenuHeader}>
-                  <div style={styles.userMenuAvatar}>👤</div>
-                  <div style={styles.userMenuInfo}>
-                    <div style={styles.userMenuName}>{usuario?.nombre ?? "Usuario"}</div>
-                    <div style={styles.userMenuEmail}>{usuario?.correo ?? ""}</div>
-                  </div>
-                </div>
-                <div style={styles.userMenuOptions}>
-                  {usuario?.rol === "admin" && (
-                    <div style={styles.userMenuOption} onClick={() => { navigate("/config-admin"); setMenuAbierto(false); }}>
-                      <span style={styles.userMenuBullet}>•</span> Gestión de usuarios
+              <>
+                {/* Capa invisible para cerrar al hacer clic fuera */}
+                <div
+                  style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, zIndex: 98 }}
+                  onClick={() => setMenuAbierto(false)}
+                />
+                <div style={{ ...styles.userMenu, zIndex: 99 }}>
+                  <div style={styles.userMenuHeader}>
+                    <div style={styles.userMenuAvatar}>👤</div>
+                    <div style={styles.userMenuInfo}>
+                      <div style={styles.userMenuName}>{usuario?.nombre ?? "Usuario"}</div>
+                      <div style={styles.userMenuEmail}>{usuario?.correo ?? ""}</div>
                     </div>
-                  )}
-                  <div style={styles.userMenuOption} onClick={() => { navigate("/config-cuenta"); setMenuAbierto(false); }}>
-                    <span style={styles.userMenuBullet}>•</span> Gestión de cuenta
                   </div>
+                  <div style={styles.userMenuOptions}>
+                    {usuario?.rol === "admin" && (
+                      <div style={styles.userMenuOption} onClick={() => { navigate("/config-admin"); setMenuAbierto(false); }}>
+                        <span style={styles.userMenuBullet}>•</span> Gestión de usuarios
+                      </div>
+                    )}
+                    <div style={styles.userMenuOption} onClick={() => { navigate("/config-cuenta"); setMenuAbierto(false); }}>
+                      <span style={styles.userMenuBullet}>•</span> Gestión de cuenta
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    style={{ ...styles.userMenuLogout, width: "100%", background: "transparent", borderLeft: "none", borderRight: "none", borderBottom: "none", color: "#fff", textAlign: "left" }}
+                    onClick={handleLogout}
+                  >🚪 Cerrar sesión</button>
                 </div>
-                <button
-                  type="button"
-                  style={{ ...styles.userMenuLogout, width: "100%", background: "transparent", borderLeft: "none", borderRight: "none", borderBottom: "none", color: "#fff", textAlign: "left" }}
-                  onClick={handleLogout}
-                >🚪 Cerrar sesión</button>
-              </div>
+              </>
             )}
           </div>
         </header>
@@ -383,10 +397,36 @@ export default function NodoDetalle({ usuario, onLogout }) {
           <button type="button" title="Ver mapa de la parcela" onClick={abrirMapa} style={{ ...styles.mapIconBorder, background: "#fff", cursor: "pointer" }}><span style={{ fontSize: 24 }}>🗺️</span></button>
           <div style={{ display: "flex", flexDirection: "column" }}>
             <h2 style={{ margin: 0, fontSize: 16 }}>
-              {nodo ? `Parcela ${nodo.parcela_id}` : "Parcela"}
+              {nodo ? `Parcela ${nodo.parcela_id}` : (parcelaActual ? `Parcela ${parcelaActual}` : "Parcela")}
             </h2>
-            <div style={styles.dots} aria-hidden="true">
-              {[0, 1, 2, 3].map((i) => <span key={i} style={{ ...styles.dot, background: "#ccc" }} />)}
+            <div style={styles.dots} aria-label="Nodos activos">
+              {nodos
+                .filter(
+                  (n) =>
+                    n.tipo !== "estacion" &&
+                    n.estado === "activo" &&
+                    parcelaActual !== undefined &&
+                    Number(n.parcela_id) === Number(parcelaActual)
+                )
+                .map((n) => {
+                  const esActual = String(n.id) === String(nodoId);
+                  return (
+                    <button
+                      key={n.id}
+                      type="button"
+                      onClick={() => navigate(`/nodos/${n.id}`)}
+                      title={`Abrir ${n.identificador || `Nodo ${n.id}`}`}
+                      aria-label={`Ir al nodo ${n.identificador || n.id}`}
+                      style={{
+                        ...styles.dot,
+                        background: esActual ? "#7A9D54" : "#c4c4c4",
+                        cursor: "pointer",
+                        border: "none",
+                        padding: 0
+                      }}
+                    />
+                  );
+                })}
             </div>
           </div>
           <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 15, flexWrap: "wrap" }}>
@@ -404,10 +444,9 @@ export default function NodoDetalle({ usuario, onLogout }) {
 
         <main style={styles.main}>
           <h2 style={styles.sectionTitle}>{nodo?.identificador ?? "Detalle de nodo"}</h2>
-          {cargando && <p style={{ color: "#666" }}>Cargando información del nodo...</p>}
           {error && <p role="alert" style={{ color: "#b42318", fontWeight: 600 }}>{error}</p>}
 
-          {!cargando && !error && nodo && (
+          {(!error && nodo) && (
             <>
               <p style={{ color: "#666", marginTop: 0 }}>
                 Nodo #{nodo.id} · Parcela {nodo.parcela_id} · Tipo: {nodo.tipo}
@@ -450,303 +489,56 @@ export default function NodoDetalle({ usuario, onLogout }) {
 }
 
 const styles = {
-
-  app: { 
-
-    display: "flex", 
-
-    maxWidth: "100%", 
-
-    minHeight: "100vh", 
-
-    margin: 0, 
-
-    background: "#fdfdfd", 
-
-    fontFamily: "sans-serif" 
-
-  },
-
-
-
-  sidebar: { 
-
-    backgroundColor: "#f4f6f8", 
-
-    display: "flex", 
-
-    flexDirection: "column", 
-
-    boxSizing: "border-box", 
-
-    transition: "width 0.3s ease, min-width 0.3s ease, opacity 0.3s ease", 
-
-    overflow: "hidden", 
-
-    whiteSpace: "nowrap", 
-
-    zIndex: 10 
-
-  },
-
+  app: { display: "flex", maxWidth: "100%", minHeight: "100vh", margin: 0, background: "#fdfdfd", fontFamily: "sans-serif" },
+  sidebar: { backgroundColor: "#f4f6f8", display: "flex", flexDirection: "column", boxSizing: "border-box", transition: "width 0.3s ease, min-width 0.3s ease, opacity 0.3s ease", overflow: "hidden", whiteSpace: "nowrap", zIndex: 10 },
   sidebarHeader: { display: "flex", alignItems: "center", padding: "20px 20px", borderBottom: "1px solid #e0e0e0", marginBottom: "20px", color: "#333" },
-
   sidebarSection: { marginBottom: "25px", display: "flex", flexDirection: "column" },
-
   sidebarSectionTitle: { padding: "0 20px", fontSize: "12px", fontWeight: "bold", color: "#888", letterSpacing: "1px", marginBottom: "10px" },
-
   sidebarLink: { display: "block", padding: "12px 20px", color: "#444", textDecoration: "none", fontSize: "15px", fontWeight: "600", transition: "background 0.2s, color 0.2s" },
-
   sidebarLinkActive: { display: "block", padding: "12px 20px", textDecoration: "none", fontSize: "15px", fontWeight: "600", backgroundColor: "#e6f4cd", color: "#5a7d3c", borderLeft: "4px solid #7A9D54" },
-
   sidebarFooter: { marginTop: "auto", padding: "20px 0", borderTop: "1px solid #e0e0e0" },
-
   sidebarLinkConfig: { display: "flex", alignItems: "center", gap: "10px", padding: "12px 20px", color: "#444", textDecoration: "none", fontSize: "15px", fontWeight: "600" },
-
-
-
-  mainContent: { 
-
-    flex: 1, 
-
-    display: "flex", 
-
-    flexDirection: "column", 
-
-    overflowY: "auto",
-
-    minWidth: 0 
-
-  },
-
+  mainContent: { flex: 1, display: "flex", flexDirection: "column", overflowY: "auto", minWidth: 0 },
   banner: {background: "#7A9D54", color: "#fff", display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 24px"},
-
   brand: { display: "flex", alignItems: "center", gap: 10 },
-
   brandTitle: { margin: 0, fontSize: 24, lineHeight: 1, fontWeight: 900, textShadow: "1px 1px 2px rgba(0,0,0,0.3)" },
-
   brandSubtitle: { display: "block", fontSize: 10, letterSpacing: 1, opacity: 0.9 },
-
-
-
   bannerRight: { display: "flex", alignItems: "center", gap: 14, position: "relative" },
-
-
-
   tempBadge: { background: "rgba(0,0,0,0.3)", padding: "6px 14px", borderRadius: 20, fontWeight: 600 },
-
   iconCircle: { width: 38, height: 38, borderRadius: "50%", background: "rgba(0,0,0,0.3)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18 },
-
-
-
-  userMenu: {
-
-    position: "absolute",
-
-    top: 65,
-
-    right: 0,
-
-    width: 260,
-
-    backgroundColor: "#2E5233",
-
-    borderRadius: 12,
-
-    padding: "16px",
-
-    color: "#fff",
-
-    boxShadow: "0 8px 20px rgba(0,0,0,0.25)",
-
-    zIndex: 100,
-
-    fontFamily: "sans-serif",
-
-  },
-
-  userMenuHeader: {
-
-    display: "flex",
-
-    alignItems: "center",
-
-    gap: 12,
-
-    borderBottom: "1px solid rgba(255,255,255,0.15)",
-
-    paddingBottom: 12,
-
-    marginBottom: 12,
-
-  },
-
-  userMenuAvatar: {
-
-    fontSize: 28,
-
-    backgroundColor: "rgba(255,255,255,0.1)",
-
-    borderRadius: "50%",
-
-    width: 44,
-
-    height: 44,
-
-    display: "flex",
-
-    alignItems: "center",
-
-    justifyContent: "center",
-
-  },
-
-  userMenuInfo: {
-
-    display: "flex",
-
-    flexDirection: "column",
-
-  },
-
-  userMenuName: {
-
-    fontSize: 15,
-
-    fontWeight: "bold",
-
-    textTransform: "uppercase",
-
-    letterSpacing: 0.5,
-
-  },
-
-  userMenuEmail: {
-
-    fontSize: 12,
-
-    opacity: 0.85,
-
-  },
-
-  userMenuOptions: {
-
-    display: "flex",
-
-    flexDirection: "column",
-
-    gap: 10,
-
-    marginBottom: 12,
-
-  },
-
-  userMenuOption: {
-
-    fontSize: 14,
-
-    cursor: "pointer",
-
-    display: "flex",
-
-    alignItems: "center",
-
-    padding: "4px 0",
-
-    transition: "opacity 0.2s",
-
-  },
-
-  userMenuBullet: {
-
-    marginRight: 8,
-
-    fontSize: 18,
-
-    lineHeight: 1,
-
-  },
-
-  userMenuLogout: {
-
-    display: "flex",
-
-    alignItems: "center",
-
-    fontSize: 14,
-
-    cursor: "pointer",
-
-    borderTop: "1px solid rgba(255,255,255,0.15)",
-
-    paddingTop: 12,
-
-    fontWeight: "bold",
-
-  },
-
-
-
+  userMenu: { position: "absolute", top: 65, right: 0, width: 260, backgroundColor: "#2E5233", borderRadius: 12, padding: "16px", color: "#fff", boxShadow: "0 8px 20px rgba(0,0,0,0.25)", zIndex: 100, fontFamily: "sans-serif" },
+  userMenuHeader: { display: "flex", alignItems: "center", gap: 12, borderBottom: "1px solid rgba(255,255,255,0.15)", paddingBottom: 12, marginBottom: 12 },
+  userMenuAvatar: { fontSize: 28, backgroundColor: "rgba(255,255,255,0.1)", borderRadius: "50%", width: 44, height: 44, display: "flex", alignItems: "center", justifyContent: "center" },
+  userMenuInfo: { display: "flex", flexDirection: "column" },
+  userMenuName: { fontSize: 15, fontWeight: "bold", textTransform: "uppercase", letterSpacing: 0.5 },
+  userMenuEmail: { fontSize: 12, opacity: 0.85 },
+  userMenuOptions: { display: "flex", flexDirection: "column", gap: 10, marginBottom: 12 },
+  userMenuOption: { fontSize: 14, cursor: "pointer", display: "flex", alignItems: "center", padding: "4px 0", transition: "opacity 0.2s" },
+  userMenuBullet: { marginRight: 8, fontSize: 18, lineHeight: 1 },
+  userMenuLogout: { display: "flex", alignItems: "center", fontSize: 14, cursor: "pointer", borderTop: "1px solid rgba(255,255,255,0.15)", paddingTop: 12, fontWeight: "bold" },
   toolbar: { display: "flex", alignItems: "center", gap: 15, padding: "14px 24px", background: "#fff", borderBottom: "1px solid #eee", flexWrap: "wrap" },
-
   mapIconBorder: { border: "2px solid #ccc", borderRadius: 12, padding: "4px 8px" },
-
   dots: { display: "flex", gap: 6, marginTop: 4 },
-
   dot: { width: 10, height: 10, borderRadius: "50%", display: "inline-block" },
-
   selectGroupContainer: { border: "1px solid #ccc", borderRadius: 8, padding: "4px 8px", display: "flex", flexDirection: "column", background: "#fff" },
-
   select: { border: "none", outline: "none", background: "transparent", fontSize: 12 },
-
   nodoToggleGrande: { border: "1px solid #ccc", borderRadius: 12, padding: "6px 12px", display: "flex", flexDirection: "column", alignItems: "center", fontSize: 14, gap: 6, background: "#fff", boxShadow: "0 2px 4px rgba(0,0,0,0.05)" },
-
   switch: { width: 50, height: 26, borderRadius: 20, position: "relative", transition: "background 0.2s" },
-
   switchKnob: { content: "", position: "absolute", top: 2, width: 22, height: 22, borderRadius: "50%", background: "#fff", transition: "left 0.2s" },
-
   logoutBtn: { padding: "6px 12px", cursor: "pointer", border: "1px solid #ccc", borderRadius: 6, background: "#f9f9f9" },
-
-
-
-  main: { 
-
-    padding: "20px 24px 24px", 
-
-    background: "#fdfdfd", 
-
-    flex: 1,
-
-    overflowX: "auto" 
-
-  },
-
+  main: { padding: "20px 24px 24px", background: "#fdfdfd", flex: 1, overflowX: "auto" },
   sectionTitle: { margin: "0 0 20px", fontSize: 26, fontWeight: "bold" },
-
   gaugeGridNodo: { display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 20, marginBottom: 30 },
-
   gaugeCard: { border: "2px solid #eaeaea", borderRadius: 16, padding: "20px 10px", textAlign: "center", background: "#fff", boxShadow: "0 2px 8px rgba(0,0,0,0.02)" },
-
   gaugeLabel: { fontSize: 14, color: "#333", marginBottom: 15 },
-
   gaugeWrap: { position: "relative", width: 130, height: 130, margin: "0 auto" },
-
   gaugeRing: { width: "100%", height: "100%", borderRadius: "50%" },
-
   gaugeInner: { position: "absolute", top: 12, left: 12, right: 12, bottom: 12, background: "#fff", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: 24, color: "#444" },
-
   gaugeScale: { display: "flex", justifyContent: "space-between", fontSize: 12, color: "#999", padding: "10px 15px 0" },
-
   bottomSectionNodo: { display: "flex", gap: 20, flexWrap: "wrap" },
-
   chartCard: { flex: 2, border: "2px solid #eaeaea", borderRadius: 12, padding: 20, background: "#fff", minWidth: 300 },
-
   statsColNodo: { flex: 1, minWidth: 220, display: "flex", flexDirection: "column", gap: 15, justifyContent: "space-between" },
-
   statBoxLigero: { background: "#f3f5ef", borderRadius: 20, padding: "15px 10px", textAlign: "center" },
-
   statLabel: { fontSize: 12, color: "#8b9c7b", fontWeight: "bold", marginBottom: 4 },
-
   statValue: { fontSize: 20, fontWeight: 800, color: "#000" },
-
 };
