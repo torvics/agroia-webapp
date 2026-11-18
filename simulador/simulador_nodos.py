@@ -34,7 +34,7 @@ import requests
 # CONFIGURACIÓN PADRE ESP32
 # ────────────────────────────────────────────────────────────
 # La IP del padre la imprime el ESP32 en el monitor serial al conectarse al WiFi.
-PADRE_IP       = os.getenv("PADRE_IP", "192.168.1.185")
+PADRE_IP       = os.getenv("PADRE_IP", "192.168.1.11")
 PADRE_PORT     = int(os.getenv("PADRE_PORT", "80"))
 PADRE_ENDPOINT = f"http://{PADRE_IP}:{PADRE_PORT}/datos"
 ENVIAR_A_PADRE = os.getenv("ENVIAR_A_PADRE", "1") == "1"
@@ -53,10 +53,12 @@ if CICLOS_MAXIMOS < 0:
 # "hectarea" ya no viaja a la web, pero el firmware del padre la sigue
 # validando (struct_message), así que se mantiene en el paquete.
 NODOS = [
-    {"id": 1, "hectarea": "Norte",  "humedad_base": 70.0, "pluviometro": True},
-    {"id": 2, "hectarea": "Sur",    "humedad_base": 68.0},
-    {"id": 3, "hectarea": "Centro", "humedad_base": 72.0},
-    {"id": 4, "hectarea": "Este",   "humedad_base": 65.0},
+    {"id": 1, "hectarea": "nodo1", "humedad_base": 70.0, "pluviometro": True},
+    {"id": 4, "hectarea": "estacion2", "humedad_base": 68.0},
+    {"id": 5, "hectarea": "nodo2", "humedad_base": 72.0},
+    {"id": 6, "hectarea": "nodo3", "humedad_base": 65.0},
+    {"id": 7, "hectarea": "nodo4", "humedad_base": 69.0},
+    {"id": 8, "hectarea": "nodo5", "humedad_base": 69.0}
 ]
 
 
@@ -179,7 +181,7 @@ def mandar_al_padre(lectura):
 
     try:
         # El ESP32 puede realizar dos POST seguidos: suelo y estacion.
-        resp = requests.post(PADRE_ENDPOINT, json=lectura, timeout=15)
+        resp = requests.post(PADRE_ENDPOINT, json=lectura, timeout=30)
         return resp.status_code == 200
 
     except requests.exceptions.ConnectionError:
@@ -244,7 +246,7 @@ def main():
         )
         hilos.append(hilo)
         hilo.start()
-        time.sleep(2)
+        time.sleep(5)  # arranque escalonado para no saturar al padre
 
     if CICLOS_MAXIMOS > 0:
         for hilo in hilos:

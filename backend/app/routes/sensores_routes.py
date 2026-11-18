@@ -768,7 +768,7 @@ def sensores_historico():
     parcela_id = request.args.get("parcela_id", type=int)
     inicio_texto = request.args.get("inicio")
     fin_texto = request.args.get("fin")
-    intervalo = request.args.get("intervalo", "30m")
+    intervalo = request.args.get("intervalo", "1h")
 
     # Validamos la parcela
     if parcela_id is None or parcela_id <= 0:
@@ -837,11 +837,9 @@ def sensores_historico():
             "permitidos": sorted(intervalos_validos)
         }), 400
 
-    # Limitamos las consultas sin agrupación.
-    if intervalo == "raw" and fin - inicio > timedelta(days=7):
-        return jsonify({
-            "error": "El intervalo raw permite máximo 7 días"
-        }), 400
+    # Agrupamos automáticamente si se pide raw en rangos mayores a 1 día
+    if intervalo == "raw" and (fin - inicio) > timedelta(days=1):
+        intervalo = "15m"
 
     inicio_iso = inicio.isoformat().replace("+00:00", "Z")
     fin_iso = fin.isoformat().replace("+00:00", "Z")

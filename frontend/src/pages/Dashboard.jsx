@@ -5,6 +5,7 @@ import Notificaciones from "../components/AvisosPanel";
 import MapaParcela from "../components/MapaParcela";
 import TipoRiegoSelector from "../components/TipoRiegoSelector";
 import TemperaturaUbicacion from "../components/TemperaturaUbicacion";
+import Swal from "sweetalert2";
 const API_URL = (
   import.meta.env.VITE_API_URL || "http://localhost:5000/api"
 ).replace(/\/api\/?$/, "");
@@ -506,11 +507,14 @@ useEffect(() => {
       // El rango incluye ambos días completos en la zona horaria del navegador.
       const inicio = new Date(`${fechaDesdeDashboard}T00:00:00`);
       const fin = new Date(`${fechaHastaDashboard}T23:59:59.999`);
+      const diasRango = (fin - inicio) / (1000 * 60 * 60 * 24);
+      const intervaloAuto = diasRango <= 1 ? "raw" : diasRango <= 7 ? "15m" : "1h";
+
       const parametros = new URLSearchParams({
-        parcela_id: String(parcelaId),
+        parcela_id: parcelaId,
         inicio: inicio.toISOString(),
         fin: fin.toISOString(),
-        intervalo: "raw",
+        intervalo: intervaloAuto,
       });
       const respuesta = await consultarAPI(
         `/sensores/historico?${parametros.toString()}`,
@@ -701,48 +705,43 @@ const idsNodosActivos = new Set(
               👤
             </div>
             {menuAbierto && (
-              <div style={styles.userMenu}>
-                <div style={styles.userMenuHeader}>
-                  <div style={styles.userMenuAvatar}>👤</div>
-                  <div style={styles.userMenuInfo}>
-                    <div style={styles.userMenuName}>
-                      {perfil?.nombre ?? usuario?.nombre ?? "Usuario"}
-                    </div>
-                    <div style={styles.userMenuEmail}>
-                      {perfil?.correo ?? usuario?.correo ?? ""}
+              <>
+                {/* Capa invisible que ocupa toda la pantalla para detectar el clic fuera */}
+                <div
+                  style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, zIndex: 98 }}
+                  onClick={() => setMenuAbierto(false)}
+                />
+                
+                <div style={{ ...styles.userMenu, zIndex: 99 }}>
+                  <div style={styles.userMenuHeader}>
+                    <div style={styles.userMenuAvatar}>👤</div>
+                    <div style={styles.userMenuInfo}>
+                      <div style={styles.userMenuName}>
+                        {/* Usa la variable correspondiente (usuario o perfil) según el archivo */}
+                        {usuario?.nombre ?? "Usuario"}
+                      </div>
+                      <div style={styles.userMenuEmail}>
+                        {usuario?.correo ?? ""}
+                      </div>
                     </div>
                   </div>
-                </div>
-                <div style={styles.userMenuOptions}>
-                  {/* Gestión de usuarios: solo administradores */}
-                  {(perfil?.rol ?? usuario?.rol) === "admin" && (
-                    <div
-                      style={styles.userMenuOption}
-                      onClick={() => {
-                        navigate("/config-admin");
-                        setMenuAbierto(false);
-                      }}
-                    >
-                      <span style={styles.userMenuBullet}>•</span>
-                      Gestión de usuarios
+                  <div style={styles.userMenuOptions}>
+                    {usuario?.rol === "admin" && (
+                      <div style={styles.userMenuOption} onClick={() => { navigate("/config-admin"); setMenuAbierto(false); }}>
+                        <span style={styles.userMenuBullet}>•</span> Gestión de usuarios
+                      </div>
+                    )}
+                    <div style={styles.userMenuOption} onClick={() => { navigate("/config-cuenta"); setMenuAbierto(false); }}>
+                      <span style={styles.userMenuBullet}>•</span> Gestión de cuenta
                     </div>
-                  )}
-                  {/* Gestión de cuenta */}
-                  <div
-                    style={styles.userMenuOption}
-                    onClick={() => {
-                      navigate("/config-cuenta");
-                      setMenuAbierto(false);
-                    }}
-                  >
-                    <span style={styles.userMenuBullet}>•</span>
-                    Gestión de cuenta
                   </div>
+                  <button
+                    type="button"
+                    style={{ ...styles.userMenuLogout, width: "100%", background: "transparent", borderLeft: "none", borderRight: "none", borderBottom: "none", color: "#fff", textAlign: "left" }}
+                    onClick={handleLogout}
+                  >🚪 Cerrar sesión</button>
                 </div>
-                <div style={styles.userMenuLogout} onClick={handleLogout}>
-                  <span style={{ marginRight: 8 }}>🚪</span> Cerrar sesión
-                </div>
-              </div>
+              </>
             )}
           </div>
         </header>
