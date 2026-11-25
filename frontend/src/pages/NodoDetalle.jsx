@@ -441,7 +441,6 @@ export default function NodoDetalle({ usuario, onLogout }) {
             <button type="button" onClick={() => setRecarga((anterior) => anterior + 1)} disabled={cargando} style={{ ...styles.logoutBtn, opacity: cargando ? 0.5 : 1 }}>
               {cargando ? "Cargando..." : "Actualizar lecturas"}
             </button>
-            <button type="button" onClick={handleLogout} style={styles.logoutBtn}>Salir</button>
           </div>
         </div>
 
