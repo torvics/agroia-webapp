@@ -3,6 +3,12 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+
+def modo_debug():
+    """Modo debug de Flask: solo con FLASK_DEBUG=1/true/yes/on. Apagado por defecto."""
+    return os.getenv("FLASK_DEBUG", "").strip().lower() in ("1", "true", "yes", "on")
+
+
 class Config:
     SECRET_KEY = os.getenv("SECRET_KEY", "cambia-esto")
     JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "cambia-esto-tambien")
@@ -12,6 +18,12 @@ class Config:
         "mysql+pymysql://agroia:agroia@mysql:3306/agroia_db"
     )
     SQLALCHEMY_TRACK_MODIFICATIONS = False
+    # Las BD en la nube cierran conexiones inactivas. Sin pre_ping, la primera
+    # consulta con una conexión caducada del pool falla (500 sin JSON).
+    SQLALCHEMY_ENGINE_OPTIONS = {
+        "pool_pre_ping": True,
+        "pool_recycle": 280,
+    }
 
     FRONTEND_ORIGIN = os.getenv("FRONTEND_ORIGIN", "http://localhost:5173")
     BACKEND_ORIGIN = os.getenv("BACKEND_ORIGIN", "http://localhost:5000")

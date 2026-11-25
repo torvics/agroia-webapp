@@ -380,3 +380,27 @@ def generar_reporte_parcela(
             )
         }
     }
+
+
+def reporte_tiene_datos(reporte):
+    """True si el periodo tiene alguna lectura, evento, comando o alerta.
+
+    Se usa para no generar archivos PDF/CSV en blanco.
+    """
+    sensores = reporte.get("sensores") or {}
+    estadisticas = sensores.get("estadisticas") or {}
+    if any((datos or {}).get("lecturas") for datos in estadisticas.values()):
+        return True
+
+    precipitacion = sensores.get("precipitacion") or {}
+    if precipitacion.get("lluvia_acum_ultima_lectura_mm") is not None:
+        return True
+
+    eventos = reporte.get("eventos") or {}
+    comandos = eventos.get("comandos") or {}
+    return bool(
+        (eventos.get("bitacora") or {}).get("total_eventos")
+        or comandos.get("ordenes_creadas")
+        or comandos.get("comandos_confirmados")
+        or (eventos.get("alertas") or {}).get("total")
+    )

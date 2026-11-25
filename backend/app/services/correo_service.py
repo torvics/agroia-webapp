@@ -15,6 +15,87 @@ def fecha_utc():
     return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
+class ErrorSMTP(ValueError):
+    """Error de configuración o conexión SMTP con mensaje seguro (sin secretos)."""
+
+
+def configuracion_smtp():
+    """Lee y valida SMTP_* del entorno. Nunca incluye valores en los errores."""
+    seguridad = os.getenv("SMTP_SECURITY", "starttls").strip().lower() or "starttls"
+    if seguridad not in ("ssl", "starttls"):
+        raise ErrorSMTP("SMTP_SECURITY debe ser ssl o starttls")
+
+    puerto_texto = os.getenv("SMTP_PORT", "").strip() or ("465" if seguridad == "ssl" else "587")
+    if not puerto_texto.isdigit() or not 1 <= int(puerto_texto) <= 65535:
+        raise ErrorSMTP("SMTP_PORT debe ser un número de puerto válido")
+
+    usuario = os.getenv("SMTP_USER", "").strip()
+    config = {
+        "host": os.getenv("SMTP_HOST", "").strip(),
+        "puerto": int(puerto_texto),
+        "seguridad": seguridad,
+        "usuario": usuario,
+        "password": os.getenv("SMTP_PASSWORD", "").strip(),
+        "remitente": os.getenv("SMTP_FROM", "").strip() or usuario,
+    }
+    faltantes = [
+        nombre for nombre, clave in (
+            ("SMTP_HOST", "host"), ("SMTP_USER", "usuario"),
+            ("SMTP_PASSWORD", "password"),
+        ) if not config[clave]
+    ]
+    if faltantes:
+        raise ErrorSMTP(
+            "Configuración SMTP incompleta: faltan las variables de entorno "
+            + ", ".join(faltantes)
+        )
+    return config
+
+
+def _validar_destinatario(destinatario):
+    if (
+        not isinstance(destinatario, str)
+        or not destinatario.strip()
+        or "\n" in destinatario
+        or "\r" in destinatario
+    ):
+        raise ValueError("Destinatario no válido")
+    return destinatario.strip()
+
+
+def enviar_mensaje_smtp(mensaje, config=None):
+    """Único punto de envío SMTP de la aplicación."""
+    config = config or configuracion_smtp()
+    if not mensaje.get("From"):
+        mensaje["From"] = config["remitente"]
+    contexto = ssl.create_default_context()
+    try:
+        if config["seguridad"] == "ssl":
+            with smtplib.SMTP_SSL(config["host"], config["puerto"], timeout=10, context=contexto) as servidor:
+                servidor.login(config["usuario"], config["password"])
+                servidor.send_message(mensaje)
+        else:
+            with smtplib.SMTP(config["host"], config["puerto"], timeout=10) as servidor:
+                servidor.ehlo()
+                servidor.starttls(context=contexto)
+                servidor.ehlo()
+                servidor.login(config["usuario"], config["password"])
+                servidor.send_message(mensaje)
+    except smtplib.SMTPAuthenticationError as error:
+        raise ErrorSMTP(
+            "El servidor SMTP rechazó el usuario o la contraseña "
+            "(en Gmail use una contraseña de aplicación)"
+        ) from error
+    except smtplib.SMTPException:
+        raise
+    except OSError as error:
+        raise ErrorSMTP(
+            f"No se pudo conectar a {config['host']}:{config['puerto']} "
+            f"({type(error).__name__}). Algunos proveedores de hosting, como el "
+            "plan gratuito de Render, bloquean los puertos SMTP salientes."
+        ) from error
+
+
 def enviar_alerta_smtp(alerta):
     """
     Construye y envía una alerta mediante SMTP.
@@ -23,38 +104,9 @@ def enviar_alerta_smtp(alerta):
     Si ocurre un problema, lanza una excepción.
     """
 
-    # 1. Obtener la configuración SMTP
-    host = os.getenv("SMTP_HOST", "").strip()
-
-    seguridad = os.getenv(
-        "SMTP_SECURITY", "starttls"
-    ).lower().strip()
-
-    puerto_predeterminado = (
-        "465" if seguridad == "ssl" else "587"
-    )
-
-    puerto = int(os.getenv(
-        "SMTP_PORT", puerto_predeterminado
-    ))
-
-    usuario = os.getenv("SMTP_USER", "").strip()
-    password = os.getenv("SMTP_PASSWORD", "")
-
-    remitente = os.getenv(
-        "SMTP_FROM", usuario
-    ).strip()
-
-    # 2. Validar la configuración
-    if seguridad not in ("ssl", "starttls"):
-        raise ValueError(
-            "SMTP_SECURITY debe ser ssl o starttls"
-        )
-
-    if not host or not usuario or not password or not remitente:
-        raise ValueError(
-            "Configuración SMTP incompleta"
-        )
+    # 1. Obtener y validar la configuración SMTP
+    config = configuracion_smtp()
+    remitente = config["remitente"]
 
     destinatario = alerta.destinatario
 
@@ -110,40 +162,8 @@ def enviar_alerta_smtp(alerta):
         f"Este es un mensaje automático."
     )
 
-    # 4. Establecer una conexión cifrada
-    contexto = ssl.create_default_context()
-
-    if seguridad == "ssl":
-
-        with smtplib.SMTP_SSL(
-            host,
-            puerto,
-            timeout=10,
-            context=contexto
-        ) as servidor:
-
-            servidor.login(usuario, password)
-            servidor.send_message(mensaje)
-
-    else:
-
-        with smtplib.SMTP(
-            host,
-            puerto,
-            timeout=10
-        ) as servidor:
-
-            servidor.ehlo()
-
-            servidor.starttls(
-                context=contexto
-            )
-
-            servidor.ehlo()
-
-            servidor.login(usuario, password)
-            servidor.send_message(mensaje)
-
+    # 4. Enviar mediante una conexión cifrada
+    enviar_mensaje_smtp(mensaje, config)
 
 
 def procesar_envio_alerta(alerta_id):
@@ -249,30 +269,14 @@ def enviar_correo_recuperacion(destinatario, enlace):
 
     Este envío no modifica registros de alertas ni los procesa el worker.
     """
-    if (
-        not isinstance(destinatario, str)
-        or not destinatario.strip()
-        or "\n" in destinatario
-        or "\r" in destinatario
-    ):
-        raise ValueError("Destinatario no válido")
+    destinatario = _validar_destinatario(destinatario)
     if not isinstance(enlace, str) or not enlace.startswith(("http://", "https://")):
         raise ValueError("Enlace no válido")
-
-    host = os.getenv("SMTP_HOST", "").strip()
-    seguridad = os.getenv("SMTP_SECURITY", "starttls").strip().lower()
-    puerto = int(os.getenv("SMTP_PORT", "465" if seguridad == "ssl" else "587"))
-    usuario = os.getenv("SMTP_USER", "").strip()
-    password = os.getenv("SMTP_PASSWORD", "")
-    remitente = os.getenv("SMTP_FROM", usuario).strip()
-    if seguridad not in ("ssl", "starttls"):
-        raise ValueError("SMTP_SECURITY debe ser ssl o starttls")
-    if not all((host, usuario, password, remitente)):
-        raise ValueError("Configuración SMTP incompleta")
+    config = configuracion_smtp()
 
     mensaje = EmailMessage()
-    mensaje["From"] = remitente
-    mensaje["To"] = destinatario.strip()
+    mensaje["From"] = config["remitente"]
+    mensaje["To"] = destinatario
     mensaje["Subject"] = "[AgroIA] Restablecer contraseña"
     mensaje.set_content(
         "Se solicitó un cambio de contraseña para tu cuenta de AgroIA.\n\n"
@@ -283,45 +287,18 @@ def enviar_correo_recuperacion(destinatario, enlace):
         "Nunca compartas este enlace con otras personas."
     )
 
-    contexto = ssl.create_default_context()
-    if seguridad == "ssl":
-        with smtplib.SMTP_SSL(host, puerto, timeout=10, context=contexto) as servidor:
-            servidor.login(usuario, password)
-            servidor.send_message(mensaje)
-    else:
-        with smtplib.SMTP(host, puerto, timeout=10) as servidor:
-            servidor.ehlo()
-            servidor.starttls(context=contexto)
-            servidor.ehlo()
-            servidor.login(usuario, password)
-            servidor.send_message(mensaje)
+    enviar_mensaje_smtp(mensaje, config)
 
 
 def enviar_correo_confirmacion(destinatario, enlace):
-    if (
-        not isinstance(destinatario, str)
-        or not destinatario.strip()
-        or "\n" in destinatario
-        or "\r" in destinatario
-    ):
-        raise ValueError("Destinatario no válido")
+    destinatario = _validar_destinatario(destinatario)
     if not isinstance(enlace, str) or not enlace.startswith(("http://", "https://")):
         raise ValueError("Enlace no válido")
-
-    host = os.getenv("SMTP_HOST", "").strip()
-    seguridad = os.getenv("SMTP_SECURITY", "starttls").strip().lower()
-    puerto = int(os.getenv("SMTP_PORT", "465" if seguridad == "ssl" else "587"))
-    usuario = os.getenv("SMTP_USER", "").strip()
-    password = os.getenv("SMTP_PASSWORD", "")
-    remitente = os.getenv("SMTP_FROM", usuario).strip()
-    if seguridad not in ("ssl", "starttls"):
-        raise ValueError("SMTP_SECURITY debe ser ssl o starttls")
-    if not all((host, usuario, password, remitente)):
-        raise ValueError("Configuración SMTP incompleta")
+    config = configuracion_smtp()
 
     mensaje = EmailMessage()
-    mensaje["From"] = remitente
-    mensaje["To"] = destinatario.strip()
+    mensaje["From"] = config["remitente"]
+    mensaje["To"] = destinatario
     mensaje["Subject"] = "[AgroIA] Confirma tu correo electrónico"
     mensaje.set_content(
         "Hola,\n\n"
@@ -332,15 +309,4 @@ def enviar_correo_confirmacion(destinatario, enlace):
         "puedes ignorar este mensaje."
     )
 
-    contexto = ssl.create_default_context()
-    if seguridad == "ssl":
-        with smtplib.SMTP_SSL(host, puerto, timeout=10, context=contexto) as servidor:
-            servidor.login(usuario, password)
-            servidor.send_message(mensaje)
-    else:
-        with smtplib.SMTP(host, puerto, timeout=10) as servidor:
-            servidor.ehlo()
-            servidor.starttls(context=contexto)
-            servidor.ehlo()
-            servidor.login(usuario, password)
-            servidor.send_message(mensaje)
+    enviar_mensaje_smtp(mensaje, config)

@@ -1,45 +1,22 @@
 import { useEffect, useState } from "react";
+import { useDesplazarAlAbrir } from "../utils/formularios";
+import { mostrarError, mostrarExito } from "../utils/dialogos";
 import { useNavigate, Link, useLocation } from "react-router-dom";
 import logoAgroIA from "../assets/agroia-logo.png";
 import Notificaciones from "../components/AvisosPanel";
+import { validarCorreo, validarNombrePersona, validarPassword } from "../utils/validaciones";
+import { hoyApp, inicioDiaApp, sumarDias, validarRangoFechas } from "../utils/fechas";
 
 const API_URL = (
   import.meta.env.VITE_API_URL || "http://localhost:5000/api"
 ).replace(/\/api\/?$/, "");
-// El reporte usa fechas locales del navegador; Flask recibe UTC con zona horaria.
-function fechaParaInput(fecha) {
-  const anio = fecha.getFullYear();
-  const mes = String(fecha.getMonth() + 1).padStart(2, "0");
-  const dia = String(fecha.getDate()).padStart(2, "0");
-  return `${anio}-${mes}-${dia}`;
-}
-
-function interpretarFechaLocal(texto) {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(texto)) return null;
-  const [anio, mes, dia] = texto.split("-").map(Number);
-  const fecha = new Date(anio, mes - 1, dia);
-  if (
-    fecha.getFullYear() !== anio ||
-    fecha.getMonth() !== mes - 1 ||
-    fecha.getDate() !== dia
-  ) return null;
-  return fecha;
-}
-
+// El reporte usa días de la zona de la aplicación; Flask recibe ISO con zona horaria.
 function obtenerRangoReporte(desde, hasta) {
-  const fechaDesde = interpretarFechaLocal(desde);
-  const fechaHasta = interpretarFechaLocal(hasta);
-  if (!fechaDesde || !fechaHasta) {
-    throw new Error("Selecciona fechas válidas para generar el reporte.");
-  }
-  if (fechaDesde > fechaHasta) {
-    throw new Error("La fecha inicial no puede ser posterior a la fecha final.");
-  }
+  const errorRango = validarRangoFechas(desde, hasta);
+  if (errorRango) throw new Error(errorRango);
+  const fechaDesde = inicioDiaApp(desde);
   // El backend trata 'fin' como exclusivo: se envía el inicio del día siguiente.
-  const finExclusivo = new Date(
-    fechaHasta.getFullYear(), fechaHasta.getMonth(), fechaHasta.getDate() + 1
-  );
-  // Se valida también la duración real, como hace Flask (incluye cambios de horario).
+  const finExclusivo = inicioDiaApp(sumarDias(hasta, 1));
   if (finExclusivo.getTime() - fechaDesde.getTime() > 366 * 86400000) {
     throw new Error("El rango máximo del reporte es de 366 días.");
   }
@@ -64,14 +41,26 @@ export default function ConfigAdmin({ onLogout }) {
   const [cargandoUsuarios, setCargandoUsuarios] = useState(true);
   const [altaAbierta, setAltaAbierta] = useState(false);
   const [nuevoUsuario, setNuevoUsuario] = useState({ nombre: "", correo: "", rol: "agricultor", password: "" });
-  const [errorAlta, setErrorAlta] = useState("");
-  const [exitoAlta, setExitoAlta] = useState("");
   const [creandoUsuario, setCreandoUsuario] = useState(false);
   const [editandoUsuario, setEditandoUsuario] = useState(null);
   const [edicionUsuario, setEdicionUsuario] = useState({ nombre:'', correo:'', rol:'agricultor', activo:true });
   const [guardandoUsuario, setGuardandoUsuario] = useState(false);
-  const [errorEdicion, setErrorEdicion] = useState('');
-  const [okEdicion, setOkEdicion] = useState('');
+  // Solo un formulario de usuarios abierto a la vez; cada apertura desplaza hasta él.
+  const [aperturaForm, setAperturaForm] = useState(0);
+  const refEdicion = useDesplazarAlAbrir(editandoUsuario !== null ? aperturaForm : null);
+  const refAlta = useDesplazarAlAbrir(altaAbierta ? aperturaForm : null);
+  const abrirAlta = () => {
+    const abrir = !altaAbierta;
+    setEditandoUsuario(null);
+    setAltaAbierta(abrir);
+    if (abrir) setAperturaForm(n => n + 1);
+  };
+  const abrirEdicion = (user) => {
+    setAltaAbierta(false);
+    setEditandoUsuario(user.id);
+    setEdicionUsuario({ nombre:user.nombre, correo:user.correo, rol:user.rol, activo:Boolean(user.activo) });
+    setAperturaForm(n => n + 1);
+  };
 
   // Reportes: parcelas autorizadas, fechas y descarga autenticada.
   const [parcelasReporte, setParcelasReporte] = useState([]);
@@ -79,15 +68,11 @@ export default function ConfigAdmin({ onLogout }) {
   const [nodosRegistrados, setNodosRegistrados] = useState([]);
   const [cargandoParcelas, setCargandoParcelas] = useState(true);
   const [errorParcelas, setErrorParcelas] = useState("");
-  const [desde, setDesde] = useState(() => {
-    const fecha = new Date();
-    fecha.setDate(fecha.getDate() - 29);
-    return fechaParaInput(fecha);
-  });
-  const [hasta, setHasta] = useState(() => fechaParaInput(new Date()));
+  const [desde, setDesde] = useState(() => sumarDias(hoyApp(), -29));
+  const [hasta, setHasta] = useState(() => hoyApp());
   const [descargando, setDescargando] = useState("");
-  const [errorReporte, setErrorReporte] = useState("");
-  const [mensajeReporte, setMensajeReporte] = useState("");
+  // Comprobación previa: "verificando" | "con_datos" | "sin_datos" | "desconocido".
+  const [datosReporte, setDatosReporte] = useState("verificando");
 
   const nombreSesion = localStorage.getItem("nombre") || "Usuario";
   const rolSesion = localStorage.getItem("rol") || "Sesión activa";
@@ -235,13 +220,59 @@ export default function ConfigAdmin({ onLogout }) {
       String(n.parcela_id) === String(parcelaReporte)
   );
 
+  // Antes de habilitar la descarga se consulta el reporte en JSON para saber
+  // si el periodo y la parcela tienen datos (evita archivos en blanco).
+  useEffect(() => {
+    if (!parcelaReporte) return undefined;
+    let rango;
+    try {
+      rango = obtenerRangoReporte(desde, hasta);
+    } catch {
+      setDatosReporte("desconocido");
+      return undefined;
+    }
+    const token =
+      localStorage.getItem("access_token") || localStorage.getItem("token");
+    if (!token) return undefined;
+
+    const controller = new AbortController();
+    setDatosReporte("verificando");
+    const espera = setTimeout(async () => {
+      try {
+        const parametros = new URLSearchParams({ ...rango, formato: "json" });
+        const respuesta = await fetch(
+          `${API_URL}/api/reportes/${encodeURIComponent(parcelaReporte)}?${parametros}`,
+          { headers: { Authorization: `Bearer ${token}` }, signal: controller.signal }
+        );
+        const contenido = await respuesta.json().catch(() => ({}));
+        if (controller.signal.aborted) return;
+        if (respuesta.ok && typeof contenido.tiene_datos === "boolean") {
+          setDatosReporte(contenido.tiene_datos ? "con_datos" : "sin_datos");
+        } else {
+          // Si no se puede comprobar, la descarga decide (Flask valida igual).
+          setDatosReporte("desconocido");
+        }
+      } catch {
+        if (!controller.signal.aborted) setDatosReporte("desconocido");
+      }
+    }, 300);
+    return () => {
+      clearTimeout(espera);
+      controller.abort();
+    };
+  }, [parcelaReporte, desde, hasta]);
+
+  const sinDatosReporte = datosReporte === "sin_datos";
+  const descargaBloqueada =
+    Boolean(descargando) || cargandoParcelas || !parcelaReporte ||
+    datosReporte === "verificando" || sinDatosReporte;
+
   const descargarReporte = async (formato) => {
     if (descargando) return;
-    setErrorReporte("");
-    setMensajeReporte("");
+    const tituloError = "No se pudo descargar el reporte";
 
     if (!parcelaReporte) {
-      setErrorReporte("Selecciona una parcela para descargar el reporte.");
+      mostrarError(tituloError, "Selecciona una parcela para descargar el reporte.");
       return;
     }
 
@@ -249,14 +280,14 @@ export default function ConfigAdmin({ onLogout }) {
     try {
       rango = obtenerRangoReporte(desde, hasta);
     } catch (e) {
-      setErrorReporte(e.message);
+      mostrarError(tituloError, e);
       return;
     }
 
     const token =
       localStorage.getItem("access_token") || localStorage.getItem("token");
     if (!token) {
-      setErrorReporte("Tu sesión ha expirado. Inicia sesión nuevamente.");
+      mostrarError(tituloError, "Tu sesión ha expirado. Inicia sesión nuevamente.");
       return;
     }
 
@@ -269,6 +300,7 @@ export default function ConfigAdmin({ onLogout }) {
       );
       if (!respuesta.ok) {
         const contenido = await respuesta.json().catch(() => ({}));
+        if (contenido.sin_datos) setDatosReporte("sin_datos");
         throw new Error(
           contenido.error || contenido.msg ||
           `No se pudo descargar el reporte (HTTP ${respuesta.status}).`
@@ -296,11 +328,12 @@ export default function ConfigAdmin({ onLogout }) {
         // Tiempo suficiente para que el navegador inicie la descarga.
         setTimeout(() => URL.revokeObjectURL(urlTemporal), 1500);
       }
-      setMensajeReporte(
+      mostrarExito(
+        "Reporte listo",
         `Se preparó la descarga del reporte ${formato.toUpperCase()}.`
       );
     } catch (e) {
-      setErrorReporte(e.message || "No se pudo descargar el reporte.");
+      mostrarError(tituloError, e.message || "No se pudo descargar el reporte.");
     } finally {
       setDescargando("");
     }
@@ -322,7 +355,6 @@ export default function ConfigAdmin({ onLogout }) {
     }
 
     setCerrandoSesion(true);
-    setError("");
 
     try {
       const respuesta = await fetch(`${API_URL}/api/auth/logout`, {
@@ -338,7 +370,8 @@ export default function ConfigAdmin({ onLogout }) {
 
       if (onLogout) onLogout(); else limpiarSesion();
     } catch (err) {
-      setError(
+      mostrarError(
+        "No se pudo cerrar sesión",
         "No fue posible cerrar sesión en el servidor. Verifica la conexión."
       );
       setCerrandoSesion(false);
@@ -347,12 +380,10 @@ export default function ConfigAdmin({ onLogout }) {
 
   const crearUsuario = async (evento) => {
     evento.preventDefault();
-    setErrorAlta(""); setExitoAlta("");
     const nombre = nuevoUsuario.nombre.trim();
     const correo = nuevoUsuario.correo.trim().toLowerCase();
-    if (nombre.length < 2 || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(correo) || nuevoUsuario.password.length < 8) {
-      setErrorAlta("Escribe nombre, correo válido y contraseña de al menos 8 caracteres."); return;
-    }
+    const errorDatos = validarNombrePersona(nombre) || validarCorreo(correo) || validarPassword(nuevoUsuario.password);
+    if (errorDatos) { mostrarError("No se pudo crear la cuenta", errorDatos); return; }
     setCreandoUsuario(true);
     try {
       const token = localStorage.getItem("access_token") || localStorage.getItem("token");
@@ -366,25 +397,30 @@ export default function ConfigAdmin({ onLogout }) {
       setUsuarios(actual => [...actual, creado]);
       setNuevoUsuario({ nombre: "", correo: "", rol: "agricultor", password: "" });
       setAltaAbierta(false);
-      setExitoAlta(`Usuario ${creado.nombre} registrado correctamente.`);
-    } catch (error) { setErrorAlta(error.message); }
+      mostrarExito("Usuario creado", `${creado.nombre} se registró correctamente.`);
+    } catch (error) { mostrarError("No se pudo crear la cuenta", error); }
     finally { setCreandoUsuario(false); }
   };
 
   const guardarEdicionUsuario = async (e) => {
     e.preventDefault();
     if (guardandoUsuario || !editandoUsuario) return;
-    setErrorEdicion('');setOkEdicion('');setGuardandoUsuario(true);
+    setGuardandoUsuario(true);
     try {
       const datos = { ...edicionUsuario, nombre:edicionUsuario.nombre.trim(), correo:edicionUsuario.correo.trim().toLowerCase() };
-      if (datos.nombre.length<2 || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(datos.correo)) throw new Error('Nombre y correo válidos son obligatorios.');
+      const original = usuarios.find(u => u.id === editandoUsuario);
+      const errorDatos =
+        (datos.nombre !== original?.nombre ? validarNombrePersona(datos.nombre) : '') ||
+        (datos.correo !== String(original?.correo ?? '').toLowerCase() ? validarCorreo(datos.correo) : '');
+      if (errorDatos) throw new Error(errorDatos);
       const token = localStorage.getItem('access_token') || localStorage.getItem('token');
       const res = await fetch(`${API_URL}/api/usuarios/${editandoUsuario}`, { method:'PUT', headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},body:JSON.stringify(datos) });
       const r = await res.json().catch(()=>({}));
       if(!res.ok) throw new Error(r.error || r.msg || `No se pudo modificar (HTTP ${res.status})`);
       setUsuarios(actual=>actual.map(u=>u.id===r.id?r:u));
-      setEditandoUsuario(null);setOkEdicion('Usuario actualizado en MySQL. Los cambios de rol pueden requerir iniciar sesión de nuevo.');
-    } catch(err) {setErrorEdicion(err.message);} finally {setGuardandoUsuario(false);}
+      setEditandoUsuario(null);
+      mostrarExito('Usuario actualizado', 'Los cambios se guardaron. Los cambios de rol pueden requerir iniciar sesión de nuevo.');
+    } catch(err) {mostrarError('No se pudo actualizar el usuario', err);} finally {setGuardandoUsuario(false);}
   };
   // ============================================
   // INTERFAZ DE ADMINISTRACIÓN
@@ -586,7 +622,7 @@ export default function ConfigAdmin({ onLogout }) {
                 </p>
               </div>
 
-              <button type="button" onClick={() => { setAltaAbierta(x => !x); setErrorAlta(""); setExitoAlta(""); }} style={{ ...styles.btnDeshabilitado, opacity: 1, cursor: "pointer", background: "#7A9D54", color: "#fff" }}>+ Nuevo usuario</button>
+              <button type="button" onClick={abrirAlta} aria-expanded={altaAbierta} style={{ ...styles.btnDeshabilitado, opacity: 1, cursor: "pointer", background: "#7A9D54", color: "#fff" }}>+ Nuevo usuario</button>
             </div>
 
             <div style={{ overflowX: "auto" }}>
@@ -644,7 +680,7 @@ export default function ConfigAdmin({ onLogout }) {
                               : "Activo"}
                           </span>
                         </td>
-                        <td style={styles.td}><button type="button" style={{...styles.btnDeshabilitado,opacity:1,cursor:'pointer',background:'#7A9D54',color:'#fff'}} onClick={()=>{setEditandoUsuario(user.id);setEdicionUsuario({nombre:user.nombre,correo:user.correo,rol:user.rol,activo:Boolean(user.activo)});setErrorEdicion('');setOkEdicion('');}}>Editar</button></td>
+                        <td style={styles.td}><button type="button" style={{...styles.btnDeshabilitado,opacity:1,cursor:'pointer',background:'#7A9D54',color:'#fff'}} onClick={()=>abrirEdicion(user)}>Editar</button></td>
                       </tr>
                     ))}
                 </tbody>
@@ -652,9 +688,9 @@ export default function ConfigAdmin({ onLogout }) {
             </div>
 
             {editandoUsuario !== null && (
-              <form onSubmit={guardarEdicionUsuario} style={{background:'#f3f8ef',border:'1px solid #c9dfba',padding:16,borderRadius:10,marginTop:15,display:'grid',gap:10}}>
+              <form ref={refEdicion} onSubmit={guardarEdicionUsuario} style={{scrollMarginTop:16,background:'#f3f8ef',border:'1px solid #c9dfba',padding:16,borderRadius:10,marginTop:15,display:'grid',gap:10}}>
                 <strong>Editar usuario ID {editandoUsuario}</strong>
-                <label>Nombre<input required minLength={2} maxLength={100} style={{display:'block',padding:9,width:'100%',boxSizing:'border-box'}} value={edicionUsuario.nombre} onChange={e=>setEdicionUsuario(p=>({...p,nombre:e.target.value}))}/></label>
+                <label>Nombre<input required minLength={2} maxLength={60} style={{display:'block',padding:9,width:'100%',boxSizing:'border-box'}} value={edicionUsuario.nombre} onChange={e=>setEdicionUsuario(p=>({...p,nombre:e.target.value}))}/></label>
                 <label>Correo<input required type="email" style={{display:'block',padding:9,width:'100%',boxSizing:'border-box'}} value={edicionUsuario.correo} onChange={e=>setEdicionUsuario(p=>({...p,correo:e.target.value}))}/></label>
                 <label>Rol<select style={{display:'block',padding:9,width:'100%'}} value={edicionUsuario.rol} onChange={e=>setEdicionUsuario(p=>({...p,rol:e.target.value}))}><option value="admin">Administrador</option><option value="agricultor">Agricultor</option></select></label>
                 <label><input type="checkbox" checked={edicionUsuario.activo} onChange={e=>setEdicionUsuario(p=>({...p,activo:e.target.checked}))}/> Cuenta activa</label>
@@ -662,21 +698,17 @@ export default function ConfigAdmin({ onLogout }) {
                 <div style={{display:'flex',gap:10}}><button style={styles.logoutBtn} disabled={guardandoUsuario} type="submit">{guardandoUsuario?'Guardando...':'Guardar cambios'}</button><button type="button" style={styles.logoutBtn} onClick={()=>setEditandoUsuario(null)}>Cancelar</button></div>
               </form>
             )}
-            {errorEdicion && <p role="alert" style={{color:'#b42318'}}>{errorEdicion}</p>}
-            {okEdicion && <p role="status" style={{color:'#2F5413'}}>{okEdicion}</p>}
             {altaAbierta && (
-              <form onSubmit={crearUsuario} style={{ background: "#f3f8ef", border: "1px solid #c9dfba", borderRadius: 10, padding: 16, marginTop: 15, display: "grid", gap: 12 }}>
+              <form ref={refAlta} onSubmit={crearUsuario} style={{ scrollMarginTop: 16, background: "#f3f8ef", border: "1px solid #c9dfba", borderRadius: 10, padding: 16, marginTop: 15, display: "grid", gap: 12 }}>
                 <strong>Registrar nuevo usuario</strong>
-                <label>Nombre <input required minLength={2} maxLength={100} value={nuevoUsuario.nombre} onChange={e => setNuevoUsuario(p => ({ ...p, nombre: e.target.value }))} style={{ padding: 9, width: "100%", boxSizing: "border-box" }} /></label>
+                <label>Nombre <input required minLength={2} maxLength={60} value={nuevoUsuario.nombre} onChange={e => setNuevoUsuario(p => ({ ...p, nombre: e.target.value }))} style={{ padding: 9, width: "100%", boxSizing: "border-box" }} /></label>
                 <label>Correo <input required type="email" maxLength={255} value={nuevoUsuario.correo} onChange={e => setNuevoUsuario(p => ({ ...p, correo: e.target.value }))} style={{ padding: 9, width: "100%", boxSizing: "border-box" }} /></label>
                 <label>Rol <select value={nuevoUsuario.rol} onChange={e => setNuevoUsuario(p => ({ ...p, rol: e.target.value }))} style={{ padding: 9, display: "block", width: "100%" }}><option value="agricultor">Agricultor</option><option value="admin">Administrador</option></select></label>
-                <label>Contraseña inicial <input required type="password" minLength={8} maxLength={128} autoComplete="new-password" value={nuevoUsuario.password} onChange={e => setNuevoUsuario(p => ({ ...p, password: e.target.value }))} style={{ padding: 9, width: "100%", boxSizing: "border-box" }} /></label>
+                <label>Contraseña inicial <input required type="password" minLength={12} maxLength={128} autoComplete="new-password" value={nuevoUsuario.password} onChange={e => setNuevoUsuario(p => ({ ...p, password: e.target.value }))} style={{ padding: 9, width: "100%", boxSizing: "border-box" }} /></label>
                 <p style={{ fontSize: 12, color: "#666" }}>El agricultor recibirá un correo de confirmación y no podrá iniciar sesión hasta confirmarlo.</p>
                 <div style={{ display: "flex", gap: 10 }}><button type="submit" disabled={creandoUsuario} style={styles.logoutBtn}>{creandoUsuario ? "Creando..." : "Crear cuenta"}</button><button type="button" onClick={() => setAltaAbierta(false)} style={styles.logoutBtn}>Cancelar</button></div>
               </form>
             )}
-            {errorAlta && <p role="alert" style={{ color: "#b42318" }}>{errorAlta}</p>}
-            {exitoAlta && <p role="status" style={{ color: "#2F5413" }}>{exitoAlta}</p>}
             <p style={styles.nota}>Los cambios de usuario se guardan en MySQL. Desactivar una cuenta evita futuros accesos según la verificación de autenticación del backend; las sesiones ya emitidas requieren control adicional de revocación.</p>
           </div>
 
@@ -697,8 +729,6 @@ export default function ConfigAdmin({ onLogout }) {
                   disabled={cargandoParcelas || Boolean(descargando)}
                   onChange={(e) => {
                     setParcelaReporte(e.target.value);
-                    setErrorReporte("");
-                    setMensajeReporte("");
                   }}
                 >
                   {!parcelasReporte.length && (
@@ -718,12 +748,10 @@ export default function ConfigAdmin({ onLogout }) {
                   type="date"
                   style={styles.fechaInput}
                   value={desde}
-                  max={hasta}
+                  max={hasta < hoyApp() ? hasta : hoyApp()}
                   disabled={Boolean(descargando)}
                   onChange={(e) => {
                     setDesde(e.target.value);
-                    setErrorReporte("");
-                    setMensajeReporte("");
                   }}
                 />
               </label>
@@ -735,11 +763,10 @@ export default function ConfigAdmin({ onLogout }) {
                   style={styles.fechaInput}
                   value={hasta}
                   min={desde}
+                  max={hoyApp()}
                   disabled={Boolean(descargando)}
                   onChange={(e) => {
                     setHasta(e.target.value);
-                    setErrorReporte("");
-                    setMensajeReporte("");
                   }}
                 />
               </label>
@@ -750,9 +777,9 @@ export default function ConfigAdmin({ onLogout }) {
                 type="button"
                 style={{
                   ...styles.btnReporte,
-                  opacity: descargando || cargandoParcelas || !parcelaReporte ? 0.55 : 1,
+                  opacity: descargaBloqueada ? 0.55 : 1,
                 }}
-                disabled={Boolean(descargando) || cargandoParcelas || !parcelaReporte}
+                disabled={descargaBloqueada}
                 onClick={() => descargarReporte("pdf")}
               >
                 {descargando === "pdf" ? "Generando PDF..." : "📄 Descargar PDF"}
@@ -761,9 +788,9 @@ export default function ConfigAdmin({ onLogout }) {
                 type="button"
                 style={{
                   ...styles.btnReporte,
-                  opacity: descargando || cargandoParcelas || !parcelaReporte ? 0.55 : 1,
+                  opacity: descargaBloqueada ? 0.55 : 1,
                 }}
-                disabled={Boolean(descargando) || cargandoParcelas || !parcelaReporte}
+                disabled={descargaBloqueada}
                 onClick={() => descargarReporte("csv")}
               >
                 {descargando === "csv" ? "Generando CSV..." : "📊 Descargar CSV"}
@@ -775,15 +802,18 @@ export default function ConfigAdmin({ onLogout }) {
                 No fue posible cargar las parcelas: {errorParcelas}
               </p>
             )}
-            {errorReporte && (
-              <p role="alert" style={styles.errorBox}>{errorReporte}</p>
+            {parcelaReporte && datosReporte === "verificando" && (
+              <p role="status" style={styles.nota}>Comprobando si hay datos en el periodo...</p>
             )}
-            {mensajeReporte && (
-              <p role="status" style={styles.exitoReporte}>{mensajeReporte}</p>
+            {sinDatosReporte && (
+              <p role="alert" style={styles.errorBox}>
+                No hay información disponible para la parcela y el periodo seleccionados.
+                Elige otro periodo o parcela para descargar el reporte.
+              </p>
             )}
 
             <p style={styles.nota}>
-              Se incluyen ambos días seleccionados según la zona horaria del navegador.
+              Se incluyen ambos días seleccionados según la hora de Hermosillo; no se permiten fechas futuras.
               El rango máximo es de 366 días. Estos son reportes de parcela;
               no son un registro de actuación física verificada del ESP32.
             </p>
@@ -897,6 +927,8 @@ const styles = {
     display: "flex",
     justifyContent: "space-between",
     alignItems: "center",
+    flexWrap: "wrap",
+    gap: 10,
     padding: "8px 24px",
   },
 
@@ -1134,12 +1166,6 @@ const styles = {
     fontSize: 14,
   },
 
-  exitoReporte: {
-    marginTop: 15,
-    color: "#2F5413",
-    fontWeight: "bold",
-    fontSize: 13,
-  },
 
   btnDeshabilitado: {
     backgroundColor: "#f1f1f1",

@@ -8,6 +8,7 @@ from sqlalchemy import update
 from werkzeug.security import generate_password_hash
 
 from ..services.correo_service import (
+    ErrorSMTP,
     enviar_correo_confirmacion,
     enviar_correo_recuperacion,
 )
@@ -19,6 +20,7 @@ from ..utils.password_reset import (
 )
 
 from app.models import Usuario
+from ..utils.validaciones import validar_correo, validar_nombre_persona, validar_password
 from datetime import datetime, timezone
 
 from flask import current_app
@@ -32,6 +34,16 @@ from ..utils.email_confirmation import (
 )
 
 auth_bp = Blueprint("auth", __name__)
+
+
+def origen_frontend():
+    """Primer origen de FRONTEND_ORIGIN (la variable admite una lista para CORS)."""
+    origenes = [
+        o.strip().rstrip("/")
+        for o in str(current_app.config.get("FRONTEND_ORIGIN", "")).split(",")
+        if o.strip()
+    ]
+    return origenes[0] if origenes else "http://localhost:5173"
 
 
 @auth_bp.route("/login", methods=["POST"])
@@ -77,7 +89,7 @@ def confirmar_correo():
             db.session.commit()
             estado = "confirmado"
 
-    destino = current_app.config["FRONTEND_ORIGIN"].rstrip("/")
+    destino = origen_frontend()
     return redirect(f"{destino}/confirmar-correo?estado={estado}")
 
 
@@ -140,36 +152,20 @@ def actualizar_perfil():
 
     # Validar nombre.
     if "nombre" in datos:
-        if not isinstance(datos["nombre"], str):
-            return jsonify({
-                "error": "El nombre debe ser texto"
-            }), 400
+        nuevo_nombre, error = validar_nombre_persona(datos["nombre"])
 
-        nuevo_nombre = datos["nombre"].strip()
-
-        if not 2 <= len(nuevo_nombre) <= 100:
+        if error:
             return jsonify({
-                "error": "El nombre debe tener entre 2 y 100 caracteres"
+                "error": error
             }), 400
 
     # Validar correo.
     if "correo" in datos:
-        if not isinstance(datos["correo"], str):
-            return jsonify({
-                "error": "El correo debe ser texto"
-            }), 400
+        nuevo_correo, error = validar_correo(datos["correo"])
 
-        nuevo_correo = datos["correo"].strip().lower()
-
-        if (
-            len(nuevo_correo) > 150
-            or not re.fullmatch(
-                r"[^@\s]+@[^@\s]+\.[^@\s]+",
-                nuevo_correo
-            )
-        ):
+        if error:
             return jsonify({
-                "error": "Formato de correo no válido"
+                "error": error
             }), 400
 
     correo_cambia = (
@@ -253,9 +249,10 @@ def cambiar_password():
             "error": "Debes proporcionar ambas contraseñas"
         }), 400
 
-    if not 12 <= len(password_nueva) <= 128:
+    _, error = validar_password(password_nueva)
+    if error:
         return jsonify({
-            "error": "La nueva contraseña debe tener entre 12 y 128 caracteres"
+            "error": error
         }), 400
 
     usuario = Usuario.query.filter_by(
@@ -440,17 +437,42 @@ def solicitar_recuperacion():
 
     # El enlace se construye desde la configuración, nunca desde un Host
     # o una URL suministrados por el cliente.
-    origen = current_app.config["FRONTEND_ORIGIN"].rstrip("/")
+    origen = origen_frontend()
     enlace = (
         f"{origen}/restablecer-password?token="
         f"{quote(crear_token_recuperacion(usuario), safe='')}"
     )
-    try:
-        enviar_correo_recuperacion(usuario.correo, enlace)
-    except Exception:
-        # No registrar el enlace ni el token secreto en los logs.
-        current_app.logger.exception("Falló el envío SMTP de recuperación")
+    # El envío se hace en segundo plano: la respuesta tarda lo mismo exista o
+    # no la cuenta, y un SMTP lento no bloquea la petición.
+    _ejecutar_en_segundo_plano(_enviar_recuperacion_seguro, usuario.correo, enlace)
     return jsonify(mensaje), 200
+
+
+def _enviar_recuperacion_seguro(correo, enlace):
+    try:
+        enviar_correo_recuperacion(correo, enlace)
+        current_app.logger.info("Correo de recuperación aceptado por el servidor SMTP")
+    except Exception as error:
+        # Registrar solo el tipo y el mensaje seguro; nunca el enlace ni el token.
+        current_app.logger.error(
+            "Falló el envío SMTP de recuperación: %s: %s",
+            type(error).__name__,
+            error if isinstance(error, ErrorSMTP) else "ver detalle del servidor SMTP",
+        )
+
+
+def _ejecutar_en_segundo_plano(funcion, *args):
+    app = current_app._get_current_object()
+    if app.config.get("TESTING"):
+        with app.app_context():
+            funcion(*args)
+        return
+
+    def tarea():
+        with app.app_context():
+            funcion(*args)
+
+    threading.Thread(target=tarea, daemon=True).start()
 
 
 @auth_bp.route("/restablecer-password", methods=["POST"])
@@ -461,8 +483,9 @@ def restablecer_password():
 
     token = datos.get("token")
     password_nueva = datos.get("password_nueva")
-    if not isinstance(password_nueva, str) or not 12 <= len(password_nueva) <= 128:
-        return jsonify({"error": "La nueva contraseña debe tener entre 12 y 128 caracteres"}), 400
+    _, error = validar_password(password_nueva)
+    if error:
+        return jsonify({"error": error}), 400
 
     identificador = obtener_id_token(token)
     if identificador is None:
