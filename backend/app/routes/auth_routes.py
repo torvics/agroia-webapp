@@ -8,6 +8,7 @@ from sqlalchemy import update
 from werkzeug.security import generate_password_hash
 
 from ..services.correo_service import (
+    ErrorSMTP,
     enviar_correo_confirmacion,
     enviar_correo_recuperacion,
 )
@@ -33,6 +34,16 @@ from ..utils.email_confirmation import (
 )
 
 auth_bp = Blueprint("auth", __name__)
+
+
+def origen_frontend():
+    """Primer origen de FRONTEND_ORIGIN (la variable admite una lista para CORS)."""
+    origenes = [
+        o.strip().rstrip("/")
+        for o in str(current_app.config.get("FRONTEND_ORIGIN", "")).split(",")
+        if o.strip()
+    ]
+    return origenes[0] if origenes else "http://localhost:5173"
 
 
 @auth_bp.route("/login", methods=["POST"])
@@ -78,7 +89,7 @@ def confirmar_correo():
             db.session.commit()
             estado = "confirmado"
 
-    destino = current_app.config["FRONTEND_ORIGIN"].rstrip("/")
+    destino = origen_frontend()
     return redirect(f"{destino}/confirmar-correo?estado={estado}")
 
 
@@ -426,17 +437,42 @@ def solicitar_recuperacion():
 
     # El enlace se construye desde la configuración, nunca desde un Host
     # o una URL suministrados por el cliente.
-    origen = current_app.config["FRONTEND_ORIGIN"].rstrip("/")
+    origen = origen_frontend()
     enlace = (
         f"{origen}/restablecer-password?token="
         f"{quote(crear_token_recuperacion(usuario), safe='')}"
     )
-    try:
-        enviar_correo_recuperacion(usuario.correo, enlace)
-    except Exception:
-        # No registrar el enlace ni el token secreto en los logs.
-        current_app.logger.exception("Falló el envío SMTP de recuperación")
+    # El envío se hace en segundo plano: la respuesta tarda lo mismo exista o
+    # no la cuenta, y un SMTP lento no bloquea la petición.
+    _ejecutar_en_segundo_plano(_enviar_recuperacion_seguro, usuario.correo, enlace)
     return jsonify(mensaje), 200
+
+
+def _enviar_recuperacion_seguro(correo, enlace):
+    try:
+        enviar_correo_recuperacion(correo, enlace)
+        current_app.logger.info("Correo de recuperación aceptado por el servidor SMTP")
+    except Exception as error:
+        # Registrar solo el tipo y el mensaje seguro; nunca el enlace ni el token.
+        current_app.logger.error(
+            "Falló el envío SMTP de recuperación: %s: %s",
+            type(error).__name__,
+            error if isinstance(error, ErrorSMTP) else "ver detalle del servidor SMTP",
+        )
+
+
+def _ejecutar_en_segundo_plano(funcion, *args):
+    app = current_app._get_current_object()
+    if app.config.get("TESTING"):
+        with app.app_context():
+            funcion(*args)
+        return
+
+    def tarea():
+        with app.app_context():
+            funcion(*args)
+
+    threading.Thread(target=tarea, daemon=True).start()
 
 
 @auth_bp.route("/restablecer-password", methods=["POST"])

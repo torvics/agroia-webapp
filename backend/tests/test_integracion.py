@@ -5,6 +5,7 @@ InfluxDB, correo, dispositivos ni credenciales reales.
 """
 
 import json
+import os
 import unittest
 from datetime import datetime, timedelta
 from unittest.mock import patch
@@ -333,6 +334,53 @@ class IntegracionTest(unittest.TestCase):
         for correo in ("", None, "usuario@dominio.com"):
             r = self.client.post("/api/alertas/config", headers=self.headers(3), json={**base, "correo_destino": correo})
             self.assertIn(r.status_code, (200, 201), (correo, r.get_json()))
+
+
+    # ---- Bloque 2: recuperación de contraseña y SMTP ----
+    def test_recuperacion_completa_sin_revelar_cuentas(self):
+        from urllib.parse import unquote
+        self.app.config["FRONTEND_ORIGIN"] = "https://agroia.example.test, http://localhost:5173"
+        with patch("app.routes.auth_routes.enviar_correo_recuperacion") as enviar:
+            r1 = self.client.post("/api/auth/recuperar-password", json={"correo": "usuario3@example.test"})
+            r2 = self.client.post("/api/auth/recuperar-password", json={"correo": "noexiste@example.test"})
+        self.assertEqual((r1.status_code, r2.status_code), (200, 200))
+        self.assertEqual(r1.get_json(), r2.get_json())
+        enviar.assert_called_once()
+        destinatario, enlace = enviar.call_args.args
+        self.assertEqual(destinatario, "usuario3@example.test")
+        self.assertTrue(enlace.startswith("https://agroia.example.test/restablecer-password?token="))
+        token = unquote(enlace.split("token=", 1)[1])
+        r = self.client.post("/api/auth/restablecer-password", json={"token": token, "password_nueva": " Clave nueva 2026"})
+        self.assertEqual(r.status_code, 400)
+        r = self.client.post("/api/auth/restablecer-password", json={"token": token, "password_nueva": "Clave nueva 2026"})
+        self.assertEqual(r.status_code, 200, r.get_json())
+        r = self.client.post("/api/auth/restablecer-password", json={"token": token, "password_nueva": "Otra clave 2027"})
+        self.assertEqual(r.status_code, 400)  # el enlace ya no sirve tras usarse
+        r = self.client.post("/api/auth/login", json={"correo": "usuario3@example.test", "password": "Clave nueva 2026"})
+        self.assertEqual(r.status_code, 200)
+
+    def test_fallo_smtp_no_cambia_la_respuesta(self):
+        from app.services.correo_service import ErrorSMTP
+        with patch("app.routes.auth_routes.enviar_correo_recuperacion", side_effect=ErrorSMTP("x")):
+            r = self.client.post("/api/auth/recuperar-password", json={"correo": "usuario4@example.test"})
+        self.assertEqual(r.status_code, 200)
+        self.assertIn("Si existe una cuenta", r.get_json()["mensaje"])
+
+    def test_configuracion_smtp_informa_variables_sin_valores(self):
+        from app.services.correo_service import ErrorSMTP, configuracion_smtp
+        entorno = {"SMTP_HOST": "smtp.example.test", "SMTP_USER": "", "SMTP_PASSWORD": "secreto-no-mostrar",
+                   "SMTP_FROM": "", "SMTP_PORT": "", "SMTP_SECURITY": "starttls"}
+        with patch.dict(os.environ, entorno):
+            with self.assertRaises(ErrorSMTP) as ctx:
+                configuracion_smtp()
+        self.assertIn("SMTP_USER", str(ctx.exception))
+        self.assertNotIn("secreto", str(ctx.exception))
+        with patch.dict(os.environ, {**entorno, "SMTP_USER": "a@example.test"}):
+            config = configuracion_smtp()
+        self.assertEqual((config["puerto"], config["remitente"]), (587, "a@example.test"))
+        with patch.dict(os.environ, {**entorno, "SMTP_USER": "a@example.test", "SMTP_PORT": "abc"}):
+            with self.assertRaises(ErrorSMTP):
+                configuracion_smtp()
 
 
 if __name__ == "__main__":
