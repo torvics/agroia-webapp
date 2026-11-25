@@ -4,6 +4,7 @@ import { useNavigate, Link, useLocation } from "react-router-dom";
 import logoAgroIA from "../assets/agroia-logo.png";
 import { leerPreferenciasAvisos, guardarPreferenciasAvisos } from "../components/avisosUtils";
 import Notificaciones from "../components/AvisosPanel";
+import { validarCorreo, validarNombrePersona, validarPassword } from "../utils/validaciones";
 
 const API_URL = (
   import.meta.env.VITE_API_URL || "http://localhost:5000/api"
@@ -145,8 +146,9 @@ const guardarPerfil = async () => {
   if (campoEditando === "nombre") {
     const nuevoNombre = nombreFormulario.trim();
 
-    if (nuevoNombre.length < 2 || nuevoNombre.length > 100) {
-      setErrorPerfil("El nombre debe tener entre 2 y 100 caracteres.");
+    const errorNombre = validarNombrePersona(nuevoNombre);
+    if (errorNombre) {
+      setErrorPerfil(errorNombre);
       return;
     }
 
@@ -162,11 +164,9 @@ const guardarPerfil = async () => {
   if (campoEditando === "correo") {
     const nuevoCorreo = correoFormulario.trim().toLowerCase();
 
-    const correoValido =
-      /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(nuevoCorreo);
-
-    if (!correoValido || nuevoCorreo.length > 150) {
-      setErrorPerfil("Introduce un correo electrónico válido.");
+    const errorCorreo = validarCorreo(nuevoCorreo);
+    if (errorCorreo) {
+      setErrorPerfil(errorCorreo);
       return;
     }
 
@@ -250,10 +250,9 @@ const cambiarPassword = async () => {
   }
 
   // Respetar las validaciones implementadas en Flask.
-  if (passwordNueva.length < 12 || passwordNueva.length > 128) {
-    setErrorPerfil(
-      "La contraseña nueva debe tener entre 12 y 128 caracteres."
-    );
+  const errorPassword = validarPassword(passwordNueva);
+  if (errorPassword) {
+    setErrorPerfil(errorPassword);
     return;
   }
 

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate, Link, useLocation } from "react-router-dom";
 import logoAgroIA from "../assets/agroia-logo.png";
 import Notificaciones from "../components/AvisosPanel";
+import { validarCorreo, validarNombrePersona, validarPassword } from "../utils/validaciones";
 
 const API_URL = (
   import.meta.env.VITE_API_URL || "http://localhost:5000/api"
@@ -350,9 +351,8 @@ export default function ConfigAdmin({ onLogout }) {
     setErrorAlta(""); setExitoAlta("");
     const nombre = nuevoUsuario.nombre.trim();
     const correo = nuevoUsuario.correo.trim().toLowerCase();
-    if (nombre.length < 2 || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(correo) || nuevoUsuario.password.length < 8) {
-      setErrorAlta("Escribe nombre, correo válido y contraseña de al menos 8 caracteres."); return;
-    }
+    const errorDatos = validarNombrePersona(nombre) || validarCorreo(correo) || validarPassword(nuevoUsuario.password);
+    if (errorDatos) { setErrorAlta(errorDatos); return; }
     setCreandoUsuario(true);
     try {
       const token = localStorage.getItem("access_token") || localStorage.getItem("token");
@@ -377,7 +377,11 @@ export default function ConfigAdmin({ onLogout }) {
     setErrorEdicion('');setOkEdicion('');setGuardandoUsuario(true);
     try {
       const datos = { ...edicionUsuario, nombre:edicionUsuario.nombre.trim(), correo:edicionUsuario.correo.trim().toLowerCase() };
-      if (datos.nombre.length<2 || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(datos.correo)) throw new Error('Nombre y correo válidos son obligatorios.');
+      const original = usuarios.find(u => u.id === editandoUsuario);
+      const errorDatos =
+        (datos.nombre !== original?.nombre ? validarNombrePersona(datos.nombre) : '') ||
+        (datos.correo !== String(original?.correo ?? '').toLowerCase() ? validarCorreo(datos.correo) : '');
+      if (errorDatos) throw new Error(errorDatos);
       const token = localStorage.getItem('access_token') || localStorage.getItem('token');
       const res = await fetch(`${API_URL}/api/usuarios/${editandoUsuario}`, { method:'PUT', headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},body:JSON.stringify(datos) });
       const r = await res.json().catch(()=>({}));
@@ -654,7 +658,7 @@ export default function ConfigAdmin({ onLogout }) {
             {editandoUsuario !== null && (
               <form onSubmit={guardarEdicionUsuario} style={{background:'#f3f8ef',border:'1px solid #c9dfba',padding:16,borderRadius:10,marginTop:15,display:'grid',gap:10}}>
                 <strong>Editar usuario ID {editandoUsuario}</strong>
-                <label>Nombre<input required minLength={2} maxLength={100} style={{display:'block',padding:9,width:'100%',boxSizing:'border-box'}} value={edicionUsuario.nombre} onChange={e=>setEdicionUsuario(p=>({...p,nombre:e.target.value}))}/></label>
+                <label>Nombre<input required minLength={2} maxLength={60} style={{display:'block',padding:9,width:'100%',boxSizing:'border-box'}} value={edicionUsuario.nombre} onChange={e=>setEdicionUsuario(p=>({...p,nombre:e.target.value}))}/></label>
                 <label>Correo<input required type="email" style={{display:'block',padding:9,width:'100%',boxSizing:'border-box'}} value={edicionUsuario.correo} onChange={e=>setEdicionUsuario(p=>({...p,correo:e.target.value}))}/></label>
                 <label>Rol<select style={{display:'block',padding:9,width:'100%'}} value={edicionUsuario.rol} onChange={e=>setEdicionUsuario(p=>({...p,rol:e.target.value}))}><option value="admin">Administrador</option><option value="agricultor">Agricultor</option></select></label>
                 <label><input type="checkbox" checked={edicionUsuario.activo} onChange={e=>setEdicionUsuario(p=>({...p,activo:e.target.checked}))}/> Cuenta activa</label>
@@ -667,10 +671,10 @@ export default function ConfigAdmin({ onLogout }) {
             {altaAbierta && (
               <form onSubmit={crearUsuario} style={{ background: "#f3f8ef", border: "1px solid #c9dfba", borderRadius: 10, padding: 16, marginTop: 15, display: "grid", gap: 12 }}>
                 <strong>Registrar nuevo usuario</strong>
-                <label>Nombre <input required minLength={2} maxLength={100} value={nuevoUsuario.nombre} onChange={e => setNuevoUsuario(p => ({ ...p, nombre: e.target.value }))} style={{ padding: 9, width: "100%", boxSizing: "border-box" }} /></label>
+                <label>Nombre <input required minLength={2} maxLength={60} value={nuevoUsuario.nombre} onChange={e => setNuevoUsuario(p => ({ ...p, nombre: e.target.value }))} style={{ padding: 9, width: "100%", boxSizing: "border-box" }} /></label>
                 <label>Correo <input required type="email" maxLength={255} value={nuevoUsuario.correo} onChange={e => setNuevoUsuario(p => ({ ...p, correo: e.target.value }))} style={{ padding: 9, width: "100%", boxSizing: "border-box" }} /></label>
                 <label>Rol <select value={nuevoUsuario.rol} onChange={e => setNuevoUsuario(p => ({ ...p, rol: e.target.value }))} style={{ padding: 9, display: "block", width: "100%" }}><option value="agricultor">Agricultor</option><option value="admin">Administrador</option></select></label>
-                <label>Contraseña inicial <input required type="password" minLength={8} maxLength={128} autoComplete="new-password" value={nuevoUsuario.password} onChange={e => setNuevoUsuario(p => ({ ...p, password: e.target.value }))} style={{ padding: 9, width: "100%", boxSizing: "border-box" }} /></label>
+                <label>Contraseña inicial <input required type="password" minLength={12} maxLength={128} autoComplete="new-password" value={nuevoUsuario.password} onChange={e => setNuevoUsuario(p => ({ ...p, password: e.target.value }))} style={{ padding: 9, width: "100%", boxSizing: "border-box" }} /></label>
                 <p style={{ fontSize: 12, color: "#666" }}>El agricultor recibirá un correo de confirmación y no podrá iniciar sesión hasta confirmarlo.</p>
                 <div style={{ display: "flex", gap: 10 }}><button type="submit" disabled={creandoUsuario} style={styles.logoutBtn}>{creandoUsuario ? "Creando..." : "Crear cuenta"}</button><button type="button" onClick={() => setAltaAbierta(false)} style={styles.logoutBtn}>Cancelar</button></div>
               </form>

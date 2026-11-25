@@ -3,6 +3,7 @@ from flask_jwt_extended import jwt_required, get_jwt_identity, get_jwt
 
 from ..extensions import db
 from ..models import Parcela
+from ..utils.validaciones import validar_coordenadas, validar_nombre_parcela
 
 
 parcelas_bp = Blueprint("parcelas", __name__)
@@ -39,15 +40,17 @@ def listar_parcelas():
 def crear_parcela():
 
     usuario_id = get_jwt_identity()
-    data = request.get_json() or {}
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify({"error": "Se requiere un objeto JSON válido"}), 400
 
-    nombre = data.get("nombre")
-    ubicacion = data.get("ubicacion")
+    nombre, error = validar_nombre_parcela(data.get("nombre"))
+    if error:
+        return jsonify({"error": error}), 400
 
-    if not nombre:
-        return jsonify({
-            "error": "El nombre de la parcela es obligatorio"
-        }), 400
+    ubicacion, error = validar_coordenadas(data.get("ubicacion"))
+    if error:
+        return jsonify({"error": error}), 400
 
     parcela = Parcela(
         nombre=nombre,
@@ -81,13 +84,24 @@ def editar_parcela(parcela_id):
             "error": "Parcela no encontrada"
         }), 404
 
-    data = request.get_json() or {}
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify({"error": "Se requiere un objeto JSON válido"}), 400
 
+    # Validar todo antes de modificar el objeto: un error no deja cambios a medias.
+    cambios = {}
     if "nombre" in data:
-        parcela.nombre = data["nombre"]
+        cambios["nombre"], error = validar_nombre_parcela(data["nombre"])
+        if error:
+            return jsonify({"error": error}), 400
 
     if "ubicacion" in data:
-        parcela.ubicacion = data["ubicacion"]
+        cambios["ubicacion"], error = validar_coordenadas(data["ubicacion"])
+        if error:
+            return jsonify({"error": error}), 400
+
+    for campo, valor in cambios.items():
+        setattr(parcela, campo, valor)
 
     db.session.commit()
 

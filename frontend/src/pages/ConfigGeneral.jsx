@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate, Link, useLocation } from "react-router-dom";
 import logoAgroIA from "../assets/agroia-logo.png";
 import Notificaciones from "../components/AvisosPanel";
+import { validarCorreo } from "../utils/validaciones";
 
 const API_URL = (
   import.meta.env.VITE_API_URL || "http://localhost:5000/api"
@@ -71,6 +72,9 @@ export default function ConfigGeneral({ usuario, onLogout }) {
   const [errorInicial, setErrorInicial] = useState("");
 
   const [formulario, setFormulario] = useState({ ...FORMULARIO_VACIO });
+  const errorCorreoDestino = validarCorreo(formulario.correo_destino, { opcional: true, maximo: 255 })
+    ? "Correo no válido. Usa el formato usuario@dominio.com o deja el campo vacío."
+    : "";
   const [configExiste, setConfigExiste] = useState(false);
   const [cargandoConfig, setCargandoConfig] = useState(false);
   const [guardando, setGuardando] = useState(false);
@@ -250,8 +254,8 @@ export default function ConfigGeneral({ usuario, onLogout }) {
       setErrorConfig("El tiempo entre alertas debe ser de 1 a 10080 minutos.");
       return;
     }
-    if (correo && (correo.length > 255 || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(correo))) {
-      setErrorConfig("Introduce un correo de destino válido o deja el campo vacío.");
+    if (validarCorreo(correo, { opcional: true, maximo: 255 })) {
+      setErrorConfig("Correo de destino inválido: escribe un correo como usuario@dominio.com o deja el campo vacío.");
       return;
     }
 
@@ -520,10 +524,18 @@ export default function ConfigGeneral({ usuario, onLogout }) {
                       <div style={styles.itemTitle}>Correo de destino (opcional)</div>
                       <div style={styles.itemDesc}>Las notificaciones SMTP requieren el servicio de alertas activo.</div>
                     </div>
-                    <input type="email" maxLength={255} style={{ ...styles.selectInput, width: 250 }}
-                      value={formulario.correo_destino} onChange={(e) => actualizarCampo("correo_destino", e.target.value)}
-                      disabled={!parcelaId || cargandoConfig || guardando || Boolean(errorCargaConfig)}
-                      placeholder="correo@ejemplo.com" autoComplete="email" />
+                    <div style={{ maxWidth: "100%" }}>
+                      <input type="email" maxLength={255} style={{ ...styles.selectInput, width: 250, maxWidth: "100%" }}
+                        value={formulario.correo_destino} onChange={(e) => actualizarCampo("correo_destino", e.target.value)}
+                        disabled={!parcelaId || cargandoConfig || guardando || Boolean(errorCargaConfig)}
+                        aria-invalid={Boolean(errorCorreoDestino)} aria-describedby="error-correo-destino"
+                        placeholder="correo@ejemplo.com" autoComplete="email" />
+                      {errorCorreoDestino && (
+                        <div id="error-correo-destino" role="alert" style={{ color: "#a33a31", fontSize: 12, marginTop: 4, maxWidth: 250 }}>
+                          {errorCorreoDestino}
+                        </div>
+                      )}
+                    </div>
                   </div>
 
                   <div style={styles.row}>

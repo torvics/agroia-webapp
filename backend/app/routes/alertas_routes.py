@@ -11,6 +11,7 @@ from flask_jwt_extended import (
 
 from ..extensions import db
 from ..models import Parcela, AlertaConfig
+from ..utils.validaciones import validar_correo
 
 
 alertas_bp = Blueprint("alertas", __name__)
@@ -217,20 +218,14 @@ def guardar_config_alertas():
                     "error": "correo_destino debe ser texto o null"
                 }), 400
 
-            correo = correo.strip()
+            correo, error_correo = validar_correo(
+                correo, opcional=True, maximo=255
+            )
 
-            if correo and (
-                len(correo) > 255
-                or not re.fullmatch(
-                    r"[^@\s]+@[^@\s]+\.[^@\s]+",
-                    correo
-                )
-            ):
+            if error_correo:
                 return jsonify({
-                    "error": "Formato de correo inválido"
+                    "error": "Correo de destino inválido. " + error_correo
                 }), 400
-
-            correo = correo or None
 
         valores_validados["correo_destino"] = correo
 

@@ -19,6 +19,7 @@ from ..utils.password_reset import (
 )
 
 from app.models import Usuario
+from ..utils.validaciones import validar_correo, validar_nombre_persona, validar_password
 from datetime import datetime, timezone
 
 from flask import current_app
@@ -140,36 +141,20 @@ def actualizar_perfil():
 
     # Validar nombre.
     if "nombre" in datos:
-        if not isinstance(datos["nombre"], str):
-            return jsonify({
-                "error": "El nombre debe ser texto"
-            }), 400
+        nuevo_nombre, error = validar_nombre_persona(datos["nombre"])
 
-        nuevo_nombre = datos["nombre"].strip()
-
-        if not 2 <= len(nuevo_nombre) <= 100:
+        if error:
             return jsonify({
-                "error": "El nombre debe tener entre 2 y 100 caracteres"
+                "error": error
             }), 400
 
     # Validar correo.
     if "correo" in datos:
-        if not isinstance(datos["correo"], str):
-            return jsonify({
-                "error": "El correo debe ser texto"
-            }), 400
+        nuevo_correo, error = validar_correo(datos["correo"])
 
-        nuevo_correo = datos["correo"].strip().lower()
-
-        if (
-            len(nuevo_correo) > 150
-            or not re.fullmatch(
-                r"[^@\s]+@[^@\s]+\.[^@\s]+",
-                nuevo_correo
-            )
-        ):
+        if error:
             return jsonify({
-                "error": "Formato de correo no válido"
+                "error": error
             }), 400
 
     correo_cambia = (
@@ -253,9 +238,10 @@ def cambiar_password():
             "error": "Debes proporcionar ambas contraseñas"
         }), 400
 
-    if not 12 <= len(password_nueva) <= 128:
+    _, error = validar_password(password_nueva)
+    if error:
         return jsonify({
-            "error": "La nueva contraseña debe tener entre 12 y 128 caracteres"
+            "error": error
         }), 400
 
     usuario = Usuario.query.filter_by(
@@ -461,8 +447,9 @@ def restablecer_password():
 
     token = datos.get("token")
     password_nueva = datos.get("password_nueva")
-    if not isinstance(password_nueva, str) or not 12 <= len(password_nueva) <= 128:
-        return jsonify({"error": "La nueva contraseña debe tener entre 12 y 128 caracteres"}), 400
+    _, error = validar_password(password_nueva)
+    if error:
+        return jsonify({"error": error}), 400
 
     identificador = obtener_id_token(token)
     if identificador is None:

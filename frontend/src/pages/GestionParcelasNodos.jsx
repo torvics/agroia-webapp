@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import MapaParcela from '../components/MapaParcela';
 import logoAgroIA from '../assets/agroia-logo.png';
 import TipoRiegoSelector from '../components/TipoRiegoSelector';
+import { validarCoordenadas, validarNombreParcela } from '../utils/validaciones';
 
 const API = (import.meta.env.VITE_API_URL || 'http://localhost:5000/api').replace(/\/api\/?$/, '') + '/api';
 const normalizar = respuesta => Array.isArray(respuesta) ? respuesta : respuesta.parcelas ?? [];
@@ -61,7 +62,8 @@ export default function GestionParcelasNodos({ usuario, onLogout }) {
   };
   const nuevaParcela = async e => {
     e.preventDefault();
-    if(!parcelaForm.nombre.trim())return setError('Escribe el nombre de la parcela.');
+    const errorDatos = validarNombreParcela(parcelaForm.nombre) || validarCoordenadas(parcelaForm.ubicacion);
+    if(errorDatos)return setError(errorDatos);
     const editar = editandoParcela !== null;
     await ejecutar(async()=> {
       await api(editar ? `/parcelas/${editandoParcela}` : '/parcelas', {method:editar?'PUT':'POST',body:{nombre:parcelaForm.nombre.trim(),ubicacion:parcelaForm.ubicacion.trim()}});
@@ -118,7 +120,7 @@ export default function GestionParcelasNodos({ usuario, onLogout }) {
           {parcelas.map(p=><tr key={p.id}><td style={td}><b>{p.nombre}</b><div style={{fontSize:12,color:'#666'}}>ID {p.id}{admin?` · Propietario ${p.usuario_id}`:''}</div></td><td style={td}>{p.ubicacion||'Sin ubicación'}</td><td style={td}>{nodos.filter(n=>Number(n.parcela_id)===Number(p.id)).length}</td><td style={td}><div style={{display:'flex',gap:6,flexWrap:'wrap'}}><button type="button" style={btnSec} onClick={()=>setMapa(p)}>Mapa</button><button type="button" style={btnSec} onClick={()=>{setEditandoParcela(p.id);setParcelaForm({nombre:p.nombre||'',ubicacion:p.ubicacion||''});}}>Editar</button><button type="button" style={btnDanger} onClick={()=>eliminarParcela(p)} disabled={ocupado}>Eliminar</button></div></td></tr>)}
         </tbody></table></div>
         <form onSubmit={nuevaParcela} style={{marginTop:22,padding:16,background:'#f2f7ed',borderRadius:8,display:'grid',gap:12}}><strong>{editandoParcela!==null?'Editar parcela':'Crear parcela nueva'}</strong>
-          <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(250px,1fr))',gap:12}}><label>Nombre<input required maxLength={120} style={campo} value={parcelaForm.nombre} onChange={e=>setParcelaForm(s=>({...s,nombre:e.target.value}))}/></label><label>Ubicación / coordenadas<input style={campo} maxLength={250} placeholder="Ej. 29.082600,-110.961200" value={parcelaForm.ubicacion} onChange={e=>setParcelaForm(s=>({...s,ubicacion:e.target.value}))}/></label></div>
+          <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(250px,1fr))',gap:12}}><label>Nombre<input required minLength={2} maxLength={100} style={campo} value={parcelaForm.nombre} onChange={e=>setParcelaForm(s=>({...s,nombre:e.target.value}))}/></label><label>Ubicación / coordenadas<input style={campo} maxLength={60} inputMode="decimal" placeholder="Ej. 29.086200, -110.951200" value={parcelaForm.ubicacion} onChange={e=>setParcelaForm(s=>({...s,ubicacion:e.target.value}))}/></label></div>
           <div style={{display:'flex',gap:8,flexWrap:'wrap'}}><button type="button" style={btnSec} onClick={capturarGPS}>📍 Usar GPS actual en formulario</button><button type="submit" disabled={ocupado} style={btn}>{editandoParcela!==null?'Guardar cambios':'Crear parcela'}</button>{editandoParcela!==null&&<button type="button" style={btnSec} onClick={()=>{setEditandoParcela(null);setParcelaForm({...vacia});}}>Cancelar edición</button>}</div>
           <small>GPS detecta la ubicación de ESTE dispositivo. Solo guarda las coordenadas cuando confirmas el formulario. Para registrar un terreno debes estar en la parcela.</small>
         </form>

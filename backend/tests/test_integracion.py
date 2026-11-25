@@ -16,6 +16,7 @@ from app import create_app
 from app.config import Config
 from app.extensions import db
 from app.models import AlertaEnviada, Nodo, Parcela, Usuario
+from app.utils.password_reset import version_credencial
 
 
 class IntegracionTest(unittest.TestCase):
@@ -53,7 +54,11 @@ class IntegracionTest(unittest.TestCase):
             self.tokens = {
                 usuario_id: create_access_token(
                     identity=str(usuario_id),
-                    additional_claims={"rol": rol},
+                    additional_claims={
+                        "rol": rol,
+                        "credencial_ver": version_credencial(
+                            db.session.get(Usuario, usuario_id)),
+                    },
                 )
                 for usuario_id, rol in ((1, "admin"), (2, "admin"),
                                         (3, "agricultor"), (4, "agricultor"))
@@ -77,7 +82,7 @@ class IntegracionTest(unittest.TestCase):
     def crear_parcela(self, usuario_id=3):
         respuesta = self.client.post(
             "/api/parcelas", headers=self.headers(usuario_id),
-            json={"nombre": "Parcela de prueba", "ubicacion": "Zona de prueba"},
+            json={"nombre": "Parcela de prueba", "ubicacion": "29.086200, -110.951200"},
         )
         self.assertEqual(respuesta.status_code, 201, respuesta.get_json())
         return respuesta.get_json()["id"]
@@ -256,6 +261,78 @@ class IntegracionTest(unittest.TestCase):
             self.assertEqual(self.client.get(ruta, headers=self.headers(3)).status_code, 400)
             self.assertEqual(self.client.get(ruta + "?inicio=2026-01-01&fin=2026-01-02", headers=self.headers(3)).status_code, 400)
             generar.assert_not_called()
+
+
+    # ---- Validadores compartidos (PRUEBAS.md, Parte C) ----
+    def test_validadores_unitarios_parte_c(self):
+        from app.utils import validaciones as v
+        for malo in ("...", "..", "  ", "a", "123", "Juan  Pérez", " -Ana"):
+            self.assertIsNotNone(v.validar_nombre_persona(malo)[1], malo)
+        for bueno in ("Juan Pérez", "María José", "O'Neil", "  Ñoño Muñoz  "):
+            self.assertIsNone(v.validar_nombre_persona(bueno)[1], bueno)
+        for malo in (" clave1234567", "clave1234567 ", "corta1", "solamenteletras", "123456789012"):
+            self.assertIsNotNone(v.validar_password(malo)[1], repr(malo))
+        self.assertIsNone(v.validar_password("Clave segura 2026")[1])
+        for malo in (".#", "315656320...", "", "   "):
+            self.assertIsNotNone(v.validar_nombre_parcela(malo)[1], malo)
+        for bueno in ("Parcela Norte", "Lote 3 Sur", "Parcela 3 Norte"):
+            self.assertIsNone(v.validar_nombre_parcela(bueno)[1], bueno)
+        for malo in ("fhvgggggggvhvgh", "guvjhbnmgh bjkb", "95, 20", "29.08", "abc, -110", "10, 200"):
+            self.assertIsNotNone(v.validar_coordenadas(malo)[1], malo)
+        self.assertEqual(v.validar_coordenadas("29.0862,-110.9512"), ("29.086200, -110.951200", None))
+        self.assertEqual(v.validar_coordenadas(""), (None, None))
+        for malo in ("sdfewfew", "a@", "@dominio.com", "a@b"):
+            self.assertIsNotNone(v.validar_correo(malo, opcional=True)[1], malo)
+        self.assertEqual(v.validar_correo("", opcional=True), (None, None))
+        self.assertEqual(v.validar_correo("Usuario@Dominio.com"), ("usuario@dominio.com", None))
+
+    def test_api_rechaza_nombres_y_contrasenas_invalidos(self):
+        for nombre in ("...", "..", "123"):
+            r = self.client.patch("/api/auth/perfil", headers=self.headers(3), json={"nombre": nombre})
+            self.assertEqual(r.status_code, 400, nombre)
+        r = self.client.patch("/api/auth/perfil", headers=self.headers(3), json={"nombre": "María José"})
+        self.assertEqual(r.status_code, 200, r.get_json())
+        base = {"correo": "nuevo2@example.test", "rol": "admin", "password": "Clave segura 2026"}
+        self.assertEqual(self.client.post("/api/usuarios", headers=self.headers(), json={**base, "nombre": "..."}).status_code, 400)
+        for clave in (" Clave segura 2026", "Clave segura 2026 ", "corta1"):
+            r = self.client.post("/api/usuarios", headers=self.headers(), json={**base, "nombre": "Juan Pérez", "password": clave})
+            self.assertEqual(r.status_code, 400, repr(clave))
+        r = self.client.post("/api/usuarios", headers=self.headers(), json={**base, "nombre": "O'Neil"})
+        self.assertEqual(r.status_code, 201, r.get_json())
+        r = self.client.put(f"/api/usuarios/{r.get_json()['id']}", headers=self.headers(), json={"nombre": ".."})
+        self.assertEqual(r.status_code, 400)
+        r = self.client.patch("/api/auth/password", headers=self.headers(3),
+                              json={"password_actual": self.PASSWORD, "password_nueva": " Clave segura 2026"})
+        self.assertEqual(r.status_code, 400)
+
+    def test_api_rechaza_parcelas_y_coordenadas_invalidas(self):
+        for cuerpo in ({"nombre": ".#"}, {"nombre": "315656320..."}, {"nombre": ""},
+                       {"nombre": "Lote 3 Sur", "ubicacion": "fhvgggggggvhvgh"},
+                       {"nombre": "Lote 3 Sur", "ubicacion": "95, 20"},
+                       {"nombre": "Lote 3 Sur", "ubicacion": "29.08"}):
+            r = self.client.post("/api/parcelas", headers=self.headers(3), json=cuerpo)
+            self.assertEqual(r.status_code, 400, cuerpo)
+        r = self.client.post("/api/parcelas", headers=self.headers(3),
+                             json={"nombre": "Lote 3 Sur", "ubicacion": "29.0862,-110.9512"})
+        self.assertEqual(r.status_code, 201)
+        self.assertEqual(r.get_json()["ubicacion"], "29.086200, -110.951200")
+        parcela_id = r.get_json()["id"]
+        r = self.client.put(f"/api/parcelas/{parcela_id}", headers=self.headers(3),
+                            json={"nombre": "Parcela Norte", "ubicacion": "abc, -110"})
+        self.assertEqual(r.status_code, 400)
+        with self.app.app_context():
+            self.assertEqual(db.session.get(Parcela, parcela_id).nombre, "Lote 3 Sur")
+
+    def test_api_rechaza_correo_destino_invalido(self):
+        parcela_id = self.crear_parcela()
+        base = {"parcela_id": parcela_id, "humedad_suelo_min": 30, "temperatura_min": 5,
+                "activa": True, "cooldown_minutos": 30}
+        for correo in ("sdfewfew", "a@", "@dominio.com"):
+            r = self.client.post("/api/alertas/config", headers=self.headers(3), json={**base, "correo_destino": correo})
+            self.assertEqual(r.status_code, 400, correo)
+        for correo in ("", None, "usuario@dominio.com"):
+            r = self.client.post("/api/alertas/config", headers=self.headers(3), json={**base, "correo_destino": correo})
+            self.assertIn(r.status_code, (200, 201), (correo, r.get_json()))
 
 
 if __name__ == "__main__":

@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import logoImg from "../assets/agroia-logo.png";
 import "./Login.css";
+import { validarPassword } from "../utils/validaciones";
 
 const API_URL = (
   import.meta.env.VITE_API_URL || "http://localhost:5000/api"
@@ -20,8 +21,9 @@ export default function RestablecerPassword() {
     evento.preventDefault();
     if (cargando) return;
     setError("");
-    if (passwordNueva.length < 12 || passwordNueva.length > 128) {
-      setError("La nueva contraseña debe tener entre 12 y 128 caracteres.");
+    const errorPassword = validarPassword(passwordNueva);
+    if (errorPassword) {
+      setError(errorPassword);
       return;
     }
     if (passwordNueva !== confirmacion) {
@@ -75,7 +77,7 @@ export default function RestablecerPassword() {
             </>
           ) : (
             <form className="login-form" onSubmit={guardar}>
-              <label htmlFor="password-nueva">Nueva contraseña (mínimo 12 caracteres)</label>
+              <label htmlFor="password-nueva">Nueva contraseña (12 a 128 caracteres, con letras y números)</label>
               <input
                 id="password-nueva"
                 type="password"
