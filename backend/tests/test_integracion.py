@@ -521,6 +521,30 @@ class IntegracionTest(unittest.TestCase):
         with self.app.app_context():
             self.assertTrue(db.engine.pool._pre_ping)
 
+    def test_lecturas_actuales_sin_influx_responden_503_json(self):
+        parcela_id = self.crear_parcela()
+        self.crear_nodo(parcela_id)
+        rutas = (
+            f"/api/sensores/actual?parcela_id={parcela_id}",
+            f"/api/sensores/actual/sensor-{parcela_id}",
+            f"/api/sensores/estacion?parcela_id={parcela_id}",
+        )
+        with patch("app.routes.sensores_routes._cliente_influx",
+                   side_effect=ConnectionError("influx caído")),                 self.assertLogs(self.app.logger, level="ERROR") as registros:
+            for ruta in rutas:
+                with self.subTest(ruta=ruta):
+                    respuesta = self.client.get(ruta, headers=self.headers(3))
+                    self.assertEqual(respuesta.status_code, 503)
+                    datos = respuesta.get_json()
+                    self.assertTrue(datos["servicio_no_disponible"])
+                    self.assertIn("InfluxDB", datos["error"])
+                    self.assertNotIn("influx caído", datos["error"])
+        self.assertEqual(len(registros.records), len(rutas))
+        # Los permisos se siguen comprobando antes de consultar InfluxDB.
+        ajena = self.client.get(f"/api/sensores/actual?parcela_id={parcela_id}",
+                                headers=self.headers(4))
+        self.assertEqual(ajena.status_code, 403)
+
 
 if __name__ == "__main__":
     unittest.main()

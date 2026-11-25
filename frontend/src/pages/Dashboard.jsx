@@ -48,8 +48,10 @@ async function consultarAPI(ruta, signal) {
     signal,
   });
   if (!respuesta.ok) {
+    // Mostrar el mensaje del backend (p. ej. 503 «InfluxDB no disponible»).
+    const datos = await respuesta.json().catch(() => ({}));
     throw new Error(
-      `Error HTTP ${respuesta.status} al consultar ${ruta}`
+      datos.error || datos.msg || `Error HTTP ${respuesta.status} al consultar ${ruta}`
     );
   }
   return respuesta.json();
@@ -827,6 +829,11 @@ const idsNodosActivos = new Set(
             <button type="button" onClick={() => setRecargaManual(x => x + 1)} style={styles.logoutBtn} disabled={cargandoDatos}>↻ Actualizar</button>
           </div>
         </div>
+        {errorDatos && (
+          <div role="alert" style={{ padding: "8px 18px", color: "#7a4a0c", background: "#fff6e8", fontSize: 13 }}>
+            No se pudieron cargar las lecturas actuales: {errorDatos}
+          </div>
+        )}
         {errorCambioNodo && (
           <div role="alert" style={{ padding: "8px 18px", color: "#9b1c1c", background: "#fff1f0", fontSize: 13 }}>
             {errorCambioNodo}
