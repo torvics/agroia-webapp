@@ -3,44 +3,18 @@ import { useNavigate, Link, useLocation } from "react-router-dom";
 import logoAgroIA from "../assets/agroia-logo.png";
 import Notificaciones from "../components/AvisosPanel";
 import { validarCorreo, validarNombrePersona, validarPassword } from "../utils/validaciones";
+import { hoyApp, inicioDiaApp, sumarDias, validarRangoFechas } from "../utils/fechas";
 
 const API_URL = (
   import.meta.env.VITE_API_URL || "http://localhost:5000/api"
 ).replace(/\/api\/?$/, "");
-// El reporte usa fechas locales del navegador; Flask recibe UTC con zona horaria.
-function fechaParaInput(fecha) {
-  const anio = fecha.getFullYear();
-  const mes = String(fecha.getMonth() + 1).padStart(2, "0");
-  const dia = String(fecha.getDate()).padStart(2, "0");
-  return `${anio}-${mes}-${dia}`;
-}
-
-function interpretarFechaLocal(texto) {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(texto)) return null;
-  const [anio, mes, dia] = texto.split("-").map(Number);
-  const fecha = new Date(anio, mes - 1, dia);
-  if (
-    fecha.getFullYear() !== anio ||
-    fecha.getMonth() !== mes - 1 ||
-    fecha.getDate() !== dia
-  ) return null;
-  return fecha;
-}
-
+// El reporte usa días de la zona de la aplicación; Flask recibe ISO con zona horaria.
 function obtenerRangoReporte(desde, hasta) {
-  const fechaDesde = interpretarFechaLocal(desde);
-  const fechaHasta = interpretarFechaLocal(hasta);
-  if (!fechaDesde || !fechaHasta) {
-    throw new Error("Selecciona fechas válidas para generar el reporte.");
-  }
-  if (fechaDesde > fechaHasta) {
-    throw new Error("La fecha inicial no puede ser posterior a la fecha final.");
-  }
+  const errorRango = validarRangoFechas(desde, hasta);
+  if (errorRango) throw new Error(errorRango);
+  const fechaDesde = inicioDiaApp(desde);
   // El backend trata 'fin' como exclusivo: se envía el inicio del día siguiente.
-  const finExclusivo = new Date(
-    fechaHasta.getFullYear(), fechaHasta.getMonth(), fechaHasta.getDate() + 1
-  );
-  // Se valida también la duración real, como hace Flask (incluye cambios de horario).
+  const finExclusivo = inicioDiaApp(sumarDias(hasta, 1));
   if (finExclusivo.getTime() - fechaDesde.getTime() > 366 * 86400000) {
     throw new Error("El rango máximo del reporte es de 366 días.");
   }
@@ -80,13 +54,11 @@ export default function ConfigAdmin({ onLogout }) {
   const [nodosRegistrados, setNodosRegistrados] = useState([]);
   const [cargandoParcelas, setCargandoParcelas] = useState(true);
   const [errorParcelas, setErrorParcelas] = useState("");
-  const [desde, setDesde] = useState(() => {
-    const fecha = new Date();
-    fecha.setDate(fecha.getDate() - 29);
-    return fechaParaInput(fecha);
-  });
-  const [hasta, setHasta] = useState(() => fechaParaInput(new Date()));
+  const [desde, setDesde] = useState(() => sumarDias(hoyApp(), -29));
+  const [hasta, setHasta] = useState(() => hoyApp());
   const [descargando, setDescargando] = useState("");
+  // Comprobación previa: "verificando" | "con_datos" | "sin_datos" | "desconocido".
+  const [datosReporte, setDatosReporte] = useState("verificando");
   const [errorReporte, setErrorReporte] = useState("");
   const [mensajeReporte, setMensajeReporte] = useState("");
 
@@ -236,6 +208,53 @@ export default function ConfigAdmin({ onLogout }) {
       String(n.parcela_id) === String(parcelaReporte)
   );
 
+  // Antes de habilitar la descarga se consulta el reporte en JSON para saber
+  // si el periodo y la parcela tienen datos (evita archivos en blanco).
+  useEffect(() => {
+    if (!parcelaReporte) return undefined;
+    let rango;
+    try {
+      rango = obtenerRangoReporte(desde, hasta);
+    } catch {
+      setDatosReporte("desconocido");
+      return undefined;
+    }
+    const token =
+      localStorage.getItem("access_token") || localStorage.getItem("token");
+    if (!token) return undefined;
+
+    const controller = new AbortController();
+    setDatosReporte("verificando");
+    const espera = setTimeout(async () => {
+      try {
+        const parametros = new URLSearchParams({ ...rango, formato: "json" });
+        const respuesta = await fetch(
+          `${API_URL}/api/reportes/${encodeURIComponent(parcelaReporte)}?${parametros}`,
+          { headers: { Authorization: `Bearer ${token}` }, signal: controller.signal }
+        );
+        const contenido = await respuesta.json().catch(() => ({}));
+        if (controller.signal.aborted) return;
+        if (respuesta.ok && typeof contenido.tiene_datos === "boolean") {
+          setDatosReporte(contenido.tiene_datos ? "con_datos" : "sin_datos");
+        } else {
+          // Si no se puede comprobar, la descarga decide (Flask valida igual).
+          setDatosReporte("desconocido");
+        }
+      } catch {
+        if (!controller.signal.aborted) setDatosReporte("desconocido");
+      }
+    }, 300);
+    return () => {
+      clearTimeout(espera);
+      controller.abort();
+    };
+  }, [parcelaReporte, desde, hasta]);
+
+  const sinDatosReporte = datosReporte === "sin_datos";
+  const descargaBloqueada =
+    Boolean(descargando) || cargandoParcelas || !parcelaReporte ||
+    datosReporte === "verificando" || sinDatosReporte;
+
   const descargarReporte = async (formato) => {
     if (descargando) return;
     setErrorReporte("");
@@ -270,6 +289,7 @@ export default function ConfigAdmin({ onLogout }) {
       );
       if (!respuesta.ok) {
         const contenido = await respuesta.json().catch(() => ({}));
+        if (contenido.sin_datos) setDatosReporte("sin_datos");
         throw new Error(
           contenido.error || contenido.msg ||
           `No se pudo descargar el reporte (HTTP ${respuesta.status}).`
@@ -722,7 +742,7 @@ export default function ConfigAdmin({ onLogout }) {
                   type="date"
                   style={styles.fechaInput}
                   value={desde}
-                  max={hasta}
+                  max={hasta < hoyApp() ? hasta : hoyApp()}
                   disabled={Boolean(descargando)}
                   onChange={(e) => {
                     setDesde(e.target.value);
@@ -739,6 +759,7 @@ export default function ConfigAdmin({ onLogout }) {
                   style={styles.fechaInput}
                   value={hasta}
                   min={desde}
+                  max={hoyApp()}
                   disabled={Boolean(descargando)}
                   onChange={(e) => {
                     setHasta(e.target.value);
@@ -754,9 +775,9 @@ export default function ConfigAdmin({ onLogout }) {
                 type="button"
                 style={{
                   ...styles.btnReporte,
-                  opacity: descargando || cargandoParcelas || !parcelaReporte ? 0.55 : 1,
+                  opacity: descargaBloqueada ? 0.55 : 1,
                 }}
-                disabled={Boolean(descargando) || cargandoParcelas || !parcelaReporte}
+                disabled={descargaBloqueada}
                 onClick={() => descargarReporte("pdf")}
               >
                 {descargando === "pdf" ? "Generando PDF..." : "📄 Descargar PDF"}
@@ -765,9 +786,9 @@ export default function ConfigAdmin({ onLogout }) {
                 type="button"
                 style={{
                   ...styles.btnReporte,
-                  opacity: descargando || cargandoParcelas || !parcelaReporte ? 0.55 : 1,
+                  opacity: descargaBloqueada ? 0.55 : 1,
                 }}
-                disabled={Boolean(descargando) || cargandoParcelas || !parcelaReporte}
+                disabled={descargaBloqueada}
                 onClick={() => descargarReporte("csv")}
               >
                 {descargando === "csv" ? "Generando CSV..." : "📊 Descargar CSV"}
@@ -779,6 +800,15 @@ export default function ConfigAdmin({ onLogout }) {
                 No fue posible cargar las parcelas: {errorParcelas}
               </p>
             )}
+            {parcelaReporte && datosReporte === "verificando" && (
+              <p role="status" style={styles.nota}>Comprobando si hay datos en el periodo...</p>
+            )}
+            {sinDatosReporte && !errorReporte && (
+              <p role="alert" style={styles.errorBox}>
+                No hay información disponible para la parcela y el periodo seleccionados.
+                Elige otro periodo o parcela para descargar el reporte.
+              </p>
+            )}
             {errorReporte && (
               <p role="alert" style={styles.errorBox}>{errorReporte}</p>
             )}
@@ -787,7 +817,7 @@ export default function ConfigAdmin({ onLogout }) {
             )}
 
             <p style={styles.nota}>
-              Se incluyen ambos días seleccionados según la zona horaria del navegador.
+              Se incluyen ambos días seleccionados según la hora de Hermosillo; no se permiten fechas futuras.
               El rango máximo es de 366 días. Estos son reportes de parcela;
               no son un registro de actuación física verificada del ESP32.
             </p>

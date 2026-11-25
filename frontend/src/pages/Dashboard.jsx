@@ -6,16 +6,10 @@ import MapaParcela from "../components/MapaParcela";
 import TipoRiegoSelector from "../components/TipoRiegoSelector";
 import TemperaturaUbicacion from "../components/TemperaturaUbicacion";
 import Swal from "sweetalert2";
+import { finDiaApp, hoyApp, inicioDiaApp, sumarDias, validarRangoFechas } from "../utils/fechas";
 const API_URL = (
   import.meta.env.VITE_API_URL || "http://localhost:5000/api"
 ).replace(/\/api\/?$/, "");
-// Fecha local en formato YYYY-MM-DD, sin saltos por zona horaria.
-function fechaLocalDashboard(fecha) {
-  const anio = fecha.getFullYear();
-  const mes = String(fecha.getMonth() + 1).padStart(2, "0");
-  const dia = String(fecha.getDate()).padStart(2, "0");
-  return `${anio}-${mes}-${dia}`;
-}
 
 const DATOS_VACIOS = {
   clima: { temperatura: null },
@@ -283,14 +277,10 @@ export default function Dashboard({ usuario, onLogout }) {
   const [mapaAbierto, setMapaAbierto] = useState(false);
   const [recargaManual, setRecargaManual] = useState(0);
   // Últimos siete días calendario por defecto, incluyendo el actual.
-  const [fechaDesdeDashboard, setFechaDesdeDashboard] = useState(() => {
-    const fecha = new Date();
-    fecha.setDate(fecha.getDate() - 6);
-    return fechaLocalDashboard(fecha);
-  });
-  const [fechaHastaDashboard, setFechaHastaDashboard] = useState(() =>
-    fechaLocalDashboard(new Date())
+  const [fechaDesdeDashboard, setFechaDesdeDashboard] = useState(() =>
+    sumarDias(hoyApp(), -6)
   );
+  const [fechaHastaDashboard, setFechaHastaDashboard] = useState(() => hoyApp());
   const [nodoPendiente, setNodoPendiente] = useState(null);
   const [errorCambioNodo, setErrorCambioNodo] = useState("");
   const [mensajeCambioNodo, setMensajeCambioNodo] = useState("");
@@ -492,21 +482,22 @@ useEffect(() => {
   const controlador = new AbortController();
   setHistoricoNodos([]);
   setErrorHistorico("");
-  if (
-    !parcelaId ||
-    !fechaDesdeDashboard ||
-    !fechaHastaDashboard ||
-    fechaDesdeDashboard > fechaHastaDashboard
-  ) {
+  if (!parcelaId) {
+    setCargandoHistorico(false);
+    return () => controlador.abort();
+  }
+  const errorRango = validarRangoFechas(fechaDesdeDashboard, fechaHastaDashboard);
+  if (errorRango) {
+    setErrorHistorico(errorRango);
     setCargandoHistorico(false);
     return () => controlador.abort();
   }
   async function cargarHistorico() {
     setCargandoHistorico(true);
     try {
-      // El rango incluye ambos días completos en la zona horaria del navegador.
-      const inicio = new Date(`${fechaDesdeDashboard}T00:00:00`);
-      const fin = new Date(`${fechaHastaDashboard}T23:59:59.999`);
+      // El rango incluye ambos días completos en la zona horaria de la aplicación.
+      const inicio = inicioDiaApp(fechaDesdeDashboard);
+      const fin = finDiaApp(fechaHastaDashboard);
       const diasRango = (fin - inicio) / (1000 * 60 * 60 * 24);
       const intervaloAuto = diasRango <= 1 ? "raw" : diasRango <= 7 ? "15m" : "1h";
 
@@ -795,7 +786,7 @@ const idsNodosActivos = new Set(
                 <input
                   type="date"
                   value={fechaDesdeDashboard}
-                  max={fechaHastaDashboard}
+                  max={fechaHastaDashboard < hoyApp() ? fechaHastaDashboard : hoyApp()}
                   onChange={(e) => setFechaDesdeDashboard(e.target.value)}
                   onKeyDown={(e) => {
                     if (e.key !== "Tab" && e.key !== "Escape") e.preventDefault();
@@ -811,6 +802,7 @@ const idsNodosActivos = new Set(
                   type="date"
                   value={fechaHastaDashboard}
                   min={fechaDesdeDashboard}
+                  max={hoyApp()}
                   onChange={(e) => setFechaHastaDashboard(e.target.value)}
                   onKeyDown={(e) => {
                     if (e.key !== "Tab" && e.key !== "Escape") e.preventDefault();

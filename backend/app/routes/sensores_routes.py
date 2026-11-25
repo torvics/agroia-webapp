@@ -9,6 +9,7 @@ import json, math
 from ..extensions import db
 from ..models import Nodo, Parcela
 from ..utils.auth_nodo import requiere_api_key
+from ..utils.fechas import validar_rango_no_futuro
 
 sensores_bp = Blueprint("sensores", __name__)
 estacion_bp = Blueprint("estacion", __name__)
@@ -824,6 +825,10 @@ def sensores_historico():
         return jsonify({
             "error": "El rango máximo por consulta es de 31 días"
         }), 400
+
+    error_futuro = validar_rango_no_futuro(inicio, fin)
+    if error_futuro:
+        return jsonify({"error": error_futuro}), 400
 
     # Intervalos permitidos para las gráficas.
     # raw devuelve las lecturas originales.

@@ -383,5 +383,90 @@ class IntegracionTest(unittest.TestCase):
                 configuracion_smtp()
 
 
+    # ---- Bloque 3: fechas futuras y reportes vacíos ----
+    def test_validador_fechas_no_futuras(self):
+        from datetime import date, timezone
+        from app.utils.fechas import validar_rango_no_futuro
+        # 2026-11-24 23:30 en Hermosillo (UTC-7) = 2026-11-25 06:30 UTC.
+        ahora = datetime(2026, 11, 25, 6, 30, tzinfo=timezone.utc)
+        hoy_ini = datetime(2026, 11, 24, 7, 0, tzinfo=timezone.utc)
+        man_ini = datetime(2026, 11, 25, 7, 0, tzinfo=timezone.utc)
+        self.assertIsNone(validar_rango_no_futuro(hoy_ini, man_ini, fin_exclusivo=True, ahora=ahora))
+        self.assertIsNone(validar_rango_no_futuro(date(2026, 1, 1), date(2026, 11, 24), ahora=ahora))
+        self.assertIsNotNone(validar_rango_no_futuro(hoy_ini, man_ini + timedelta(days=1), fin_exclusivo=True, ahora=ahora))
+        self.assertIsNotNone(validar_rango_no_futuro(man_ini, None, ahora=ahora))
+        self.assertIsNotNone(validar_rango_no_futuro(None, date(2026, 11, 25), ahora=ahora))
+
+    def _rango_dias(self, desplazamiento_fin):
+        from app.utils.fechas import ZONA_HORARIA_APP, hoy_app
+        hoy = hoy_app()
+        inicio = datetime.combine(hoy - timedelta(days=3), datetime.min.time(), ZONA_HORARIA_APP)
+        fin = datetime.combine(hoy + timedelta(days=desplazamiento_fin), datetime.min.time(), ZONA_HORARIA_APP)
+        return inicio.isoformat(), fin.isoformat()
+
+    def test_api_rechaza_fechas_futuras(self):
+        from urllib.parse import urlencode
+        parcela_id = self.crear_parcela()
+        h = self.headers(3)
+        # Reporte: fin exclusivo = mañana 00:00 (incluye hoy) ok; pasado mañana = futuro.
+        with patch("app.routes.reportes_routes.generar_reporte_parcela", return_value={}) as generar:
+            inicio, fin = self._rango_dias(2)
+            r = self.client.get(f"/api/reportes/{parcela_id}?" + urlencode({"inicio": inicio, "fin": fin}), headers=h)
+            self.assertEqual(r.status_code, 400, r.get_json())
+            self.assertIn("posteriores a hoy", r.get_json()["error"])
+            generar.assert_not_called()
+            inicio, fin = self._rango_dias(1)
+            r = self.client.get(f"/api/reportes/{parcela_id}?" + urlencode({"inicio": inicio, "fin": fin}), headers=h)
+            self.assertEqual(r.status_code, 200, r.get_json())
+        # Bitácora: día de mañana rechazado; hoy aceptado.
+        from app.utils.fechas import hoy_app
+        hoy = hoy_app()
+        r = self.client.get(f"/api/bitacora?parcela_id={parcela_id}&inicio={hoy}&fin={hoy + timedelta(days=1)}", headers=h)
+        self.assertEqual(r.status_code, 400, r.get_json())
+        r = self.client.get(f"/api/bitacora?parcela_id={parcela_id}&inicio={hoy}&fin={hoy}", headers=h)
+        self.assertEqual(r.status_code, 200, r.get_json())
+        # Histórico: se rechaza antes de consultar InfluxDB.
+        inicio, fin = self._rango_dias(2)
+        r = self.client.get(f"/api/sensores/historico?" + urlencode({"parcela_id": parcela_id, "inicio": inicio, "fin": fin}), headers=h)
+        self.assertEqual(r.status_code, 400, r.get_json())
+        self.assertIn("posteriores a hoy", r.get_json()["error"])
+
+    def test_reporte_sin_datos_no_genera_archivo(self):
+        from urllib.parse import urlencode
+        from app.services.reportes_service import reporte_tiene_datos
+        parcela_id = self.crear_parcela()
+        vacio = {
+            "sensores": {"estadisticas": {"humedad": {"lecturas": 0}},
+                         "precipitacion": {"lluvia_acum_ultima_lectura_mm": None}},
+            "eventos": {"bitacora": {"total_eventos": 0},
+                        "comandos": {"ordenes_creadas": 0, "comandos_confirmados": 0},
+                        "alertas": {"total": 0}},
+        }
+        con_datos = json.loads(json.dumps(vacio))
+        con_datos["sensores"]["estadisticas"]["humedad"]["lecturas"] = 5
+        self.assertFalse(reporte_tiene_datos(vacio))
+        self.assertTrue(reporte_tiene_datos(con_datos))
+        inicio, fin = self._rango_dias(1)
+        base = f"/api/reportes/{parcela_id}?"
+        with patch("app.routes.reportes_routes.generar_reporte_parcela", return_value=vacio), \
+             patch("app.routes.reportes_routes.generar_csv") as csv, \
+             patch("app.routes.reportes_routes.generar_pdf") as pdf:
+            for formato in ("csv", "pdf"):
+                r = self.client.get(base + urlencode({"inicio": inicio, "fin": fin, "formato": formato}), headers=self.headers(3))
+                self.assertEqual(r.status_code, 404)
+                self.assertTrue(r.get_json()["sin_datos"])
+                self.assertIn("No hay información", r.get_json()["error"])
+            csv.assert_not_called()
+            pdf.assert_not_called()
+            r = self.client.get(base + urlencode({"inicio": inicio, "fin": fin}), headers=self.headers(3))
+            self.assertEqual(r.status_code, 200)
+            self.assertFalse(r.get_json()["tiene_datos"])
+        with patch("app.routes.reportes_routes.generar_reporte_parcela", return_value=con_datos), \
+             patch("app.routes.reportes_routes.generar_csv", return_value=b"a,b\n1,2\n"):
+            r = self.client.get(base + urlencode({"inicio": inicio, "fin": fin, "formato": "csv"}), headers=self.headers(3))
+            self.assertEqual(r.status_code, 200)
+            self.assertIn("text/csv", r.content_type)
+
+
 if __name__ == "__main__":
     unittest.main()
