@@ -545,6 +545,16 @@ class IntegracionTest(unittest.TestCase):
                                 headers=self.headers(4))
         self.assertEqual(ajena.status_code, 403)
 
+    def test_modo_debug_apagado_por_defecto(self):
+        from app.config import modo_debug
+        with patch.dict(os.environ, {}, clear=False):
+            os.environ.pop("FLASK_DEBUG", None)
+            self.assertFalse(modo_debug())
+        for valor, esperado in (("1", True), ("true", True), (" On ", True), ("yes", True),
+                                ("0", False), ("false", False), ("", False), ("debug", False)):
+            with self.subTest(valor=valor), patch.dict(os.environ, {"FLASK_DEBUG": valor}):
+                self.assertEqual(modo_debug(), esperado)
+
 
 if __name__ == "__main__":
     unittest.main()
