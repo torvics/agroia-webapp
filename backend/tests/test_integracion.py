@@ -5,6 +5,7 @@ InfluxDB, correo, dispositivos ni credenciales reales.
 """
 
 import json
+import os
 import unittest
 from datetime import datetime, timedelta
 from unittest.mock import patch
@@ -16,6 +17,7 @@ from app import create_app
 from app.config import Config
 from app.extensions import db
 from app.models import AlertaEnviada, Nodo, Parcela, Usuario
+from app.utils.password_reset import version_credencial
 
 
 class IntegracionTest(unittest.TestCase):
@@ -53,7 +55,11 @@ class IntegracionTest(unittest.TestCase):
             self.tokens = {
                 usuario_id: create_access_token(
                     identity=str(usuario_id),
-                    additional_claims={"rol": rol},
+                    additional_claims={
+                        "rol": rol,
+                        "credencial_ver": version_credencial(
+                            db.session.get(Usuario, usuario_id)),
+                    },
                 )
                 for usuario_id, rol in ((1, "admin"), (2, "admin"),
                                         (3, "agricultor"), (4, "agricultor"))
@@ -77,7 +83,7 @@ class IntegracionTest(unittest.TestCase):
     def crear_parcela(self, usuario_id=3):
         respuesta = self.client.post(
             "/api/parcelas", headers=self.headers(usuario_id),
-            json={"nombre": "Parcela de prueba", "ubicacion": "Zona de prueba"},
+            json={"nombre": "Parcela de prueba", "ubicacion": "29.086200, -110.951200"},
         )
         self.assertEqual(respuesta.status_code, 201, respuesta.get_json())
         return respuesta.get_json()["id"]
@@ -256,6 +262,298 @@ class IntegracionTest(unittest.TestCase):
             self.assertEqual(self.client.get(ruta, headers=self.headers(3)).status_code, 400)
             self.assertEqual(self.client.get(ruta + "?inicio=2026-01-01&fin=2026-01-02", headers=self.headers(3)).status_code, 400)
             generar.assert_not_called()
+
+
+    # ---- Validadores compartidos (PRUEBAS.md, Parte C) ----
+    def test_validadores_unitarios_parte_c(self):
+        from app.utils import validaciones as v
+        for malo in ("...", "..", "  ", "a", "123", "Juan  Pérez", " -Ana"):
+            self.assertIsNotNone(v.validar_nombre_persona(malo)[1], malo)
+        for bueno in ("Juan Pérez", "María José", "O'Neil", "  Ñoño Muñoz  "):
+            self.assertIsNone(v.validar_nombre_persona(bueno)[1], bueno)
+        for malo in (" clave1234567", "clave1234567 ", "corta1", "solamenteletras", "123456789012"):
+            self.assertIsNotNone(v.validar_password(malo)[1], repr(malo))
+        self.assertIsNone(v.validar_password("Clave segura 2026")[1])
+        for malo in (".#", "315656320...", "", "   "):
+            self.assertIsNotNone(v.validar_nombre_parcela(malo)[1], malo)
+        for bueno in ("Parcela Norte", "Lote 3 Sur", "Parcela 3 Norte"):
+            self.assertIsNone(v.validar_nombre_parcela(bueno)[1], bueno)
+        for malo in ("fhvgggggggvhvgh", "guvjhbnmgh bjkb", "95, 20", "29.08", "abc, -110", "10, 200"):
+            self.assertIsNotNone(v.validar_coordenadas(malo)[1], malo)
+        self.assertEqual(v.validar_coordenadas("29.0862,-110.9512"), ("29.086200, -110.951200", None))
+        self.assertEqual(v.validar_coordenadas(""), (None, None))
+        for malo in ("sdfewfew", "a@", "@dominio.com", "a@b"):
+            self.assertIsNotNone(v.validar_correo(malo, opcional=True)[1], malo)
+        self.assertEqual(v.validar_correo("", opcional=True), (None, None))
+        self.assertEqual(v.validar_correo("Usuario@Dominio.com"), ("usuario@dominio.com", None))
+
+    def test_api_rechaza_nombres_y_contrasenas_invalidos(self):
+        for nombre in ("...", "..", "123"):
+            r = self.client.patch("/api/auth/perfil", headers=self.headers(3), json={"nombre": nombre})
+            self.assertEqual(r.status_code, 400, nombre)
+        r = self.client.patch("/api/auth/perfil", headers=self.headers(3), json={"nombre": "María José"})
+        self.assertEqual(r.status_code, 200, r.get_json())
+        base = {"correo": "nuevo2@example.test", "rol": "admin", "password": "Clave segura 2026"}
+        self.assertEqual(self.client.post("/api/usuarios", headers=self.headers(), json={**base, "nombre": "..."}).status_code, 400)
+        for clave in (" Clave segura 2026", "Clave segura 2026 ", "corta1"):
+            r = self.client.post("/api/usuarios", headers=self.headers(), json={**base, "nombre": "Juan Pérez", "password": clave})
+            self.assertEqual(r.status_code, 400, repr(clave))
+        r = self.client.post("/api/usuarios", headers=self.headers(), json={**base, "nombre": "O'Neil"})
+        self.assertEqual(r.status_code, 201, r.get_json())
+        r = self.client.put(f"/api/usuarios/{r.get_json()['id']}", headers=self.headers(), json={"nombre": ".."})
+        self.assertEqual(r.status_code, 400)
+        r = self.client.patch("/api/auth/password", headers=self.headers(3),
+                              json={"password_actual": self.PASSWORD, "password_nueva": " Clave segura 2026"})
+        self.assertEqual(r.status_code, 400)
+
+    def test_api_rechaza_parcelas_y_coordenadas_invalidas(self):
+        for cuerpo in ({"nombre": ".#"}, {"nombre": "315656320..."}, {"nombre": ""},
+                       {"nombre": "Lote 3 Sur", "ubicacion": "fhvgggggggvhvgh"},
+                       {"nombre": "Lote 3 Sur", "ubicacion": "95, 20"},
+                       {"nombre": "Lote 3 Sur", "ubicacion": "29.08"}):
+            r = self.client.post("/api/parcelas", headers=self.headers(3), json=cuerpo)
+            self.assertEqual(r.status_code, 400, cuerpo)
+        r = self.client.post("/api/parcelas", headers=self.headers(3),
+                             json={"nombre": "Lote 3 Sur", "ubicacion": "29.0862,-110.9512"})
+        self.assertEqual(r.status_code, 201)
+        self.assertEqual(r.get_json()["ubicacion"], "29.086200, -110.951200")
+        parcela_id = r.get_json()["id"]
+        r = self.client.put(f"/api/parcelas/{parcela_id}", headers=self.headers(3),
+                            json={"nombre": "Parcela Norte", "ubicacion": "abc, -110"})
+        self.assertEqual(r.status_code, 400)
+        with self.app.app_context():
+            self.assertEqual(db.session.get(Parcela, parcela_id).nombre, "Lote 3 Sur")
+
+    def test_api_rechaza_correo_destino_invalido(self):
+        parcela_id = self.crear_parcela()
+        base = {"parcela_id": parcela_id, "humedad_suelo_min": 30, "temperatura_min": 5,
+                "activa": True, "cooldown_minutos": 30}
+        for correo in ("sdfewfew", "a@", "@dominio.com"):
+            r = self.client.post("/api/alertas/config", headers=self.headers(3), json={**base, "correo_destino": correo})
+            self.assertEqual(r.status_code, 400, correo)
+        for correo in ("", None, "usuario@dominio.com"):
+            r = self.client.post("/api/alertas/config", headers=self.headers(3), json={**base, "correo_destino": correo})
+            self.assertIn(r.status_code, (200, 201), (correo, r.get_json()))
+
+
+    # ---- Bloque 2: recuperación de contraseña y SMTP ----
+    def test_recuperacion_completa_sin_revelar_cuentas(self):
+        from urllib.parse import unquote
+        self.app.config["FRONTEND_ORIGIN"] = "https://agroia.example.test, http://localhost:5173"
+        with patch("app.routes.auth_routes.enviar_correo_recuperacion") as enviar:
+            r1 = self.client.post("/api/auth/recuperar-password", json={"correo": "usuario3@example.test"})
+            r2 = self.client.post("/api/auth/recuperar-password", json={"correo": "noexiste@example.test"})
+        self.assertEqual((r1.status_code, r2.status_code), (200, 200))
+        self.assertEqual(r1.get_json(), r2.get_json())
+        enviar.assert_called_once()
+        destinatario, enlace = enviar.call_args.args
+        self.assertEqual(destinatario, "usuario3@example.test")
+        self.assertTrue(enlace.startswith("https://agroia.example.test/restablecer-password?token="))
+        token = unquote(enlace.split("token=", 1)[1])
+        r = self.client.post("/api/auth/restablecer-password", json={"token": token, "password_nueva": " Clave nueva 2026"})
+        self.assertEqual(r.status_code, 400)
+        r = self.client.post("/api/auth/restablecer-password", json={"token": token, "password_nueva": "Clave nueva 2026"})
+        self.assertEqual(r.status_code, 200, r.get_json())
+        r = self.client.post("/api/auth/restablecer-password", json={"token": token, "password_nueva": "Otra clave 2027"})
+        self.assertEqual(r.status_code, 400)  # el enlace ya no sirve tras usarse
+        r = self.client.post("/api/auth/login", json={"correo": "usuario3@example.test", "password": "Clave nueva 2026"})
+        self.assertEqual(r.status_code, 200)
+
+    def test_fallo_smtp_no_cambia_la_respuesta(self):
+        from app.services.correo_service import ErrorSMTP
+        with patch("app.routes.auth_routes.enviar_correo_recuperacion", side_effect=ErrorSMTP("x")):
+            r = self.client.post("/api/auth/recuperar-password", json={"correo": "usuario4@example.test"})
+        self.assertEqual(r.status_code, 200)
+        self.assertIn("Si existe una cuenta", r.get_json()["mensaje"])
+
+    def test_configuracion_smtp_informa_variables_sin_valores(self):
+        from app.services.correo_service import ErrorSMTP, configuracion_smtp
+        entorno = {"SMTP_HOST": "smtp.example.test", "SMTP_USER": "", "SMTP_PASSWORD": "secreto-no-mostrar",
+                   "SMTP_FROM": "", "SMTP_PORT": "", "SMTP_SECURITY": "starttls"}
+        with patch.dict(os.environ, entorno):
+            with self.assertRaises(ErrorSMTP) as ctx:
+                configuracion_smtp()
+        self.assertIn("SMTP_USER", str(ctx.exception))
+        self.assertNotIn("secreto", str(ctx.exception))
+        with patch.dict(os.environ, {**entorno, "SMTP_USER": "a@example.test"}):
+            config = configuracion_smtp()
+        self.assertEqual((config["puerto"], config["remitente"]), (587, "a@example.test"))
+        with patch.dict(os.environ, {**entorno, "SMTP_USER": "a@example.test", "SMTP_PORT": "abc"}):
+            with self.assertRaises(ErrorSMTP):
+                configuracion_smtp()
+
+
+    # ---- Bloque 3: fechas futuras y reportes vacíos ----
+    def test_validador_fechas_no_futuras(self):
+        from datetime import date, timezone
+        from app.utils.fechas import validar_rango_no_futuro
+        # 2026-11-24 23:30 en Hermosillo (UTC-7) = 2026-11-25 06:30 UTC.
+        ahora = datetime(2026, 11, 25, 6, 30, tzinfo=timezone.utc)
+        hoy_ini = datetime(2026, 11, 24, 7, 0, tzinfo=timezone.utc)
+        man_ini = datetime(2026, 11, 25, 7, 0, tzinfo=timezone.utc)
+        self.assertIsNone(validar_rango_no_futuro(hoy_ini, man_ini, fin_exclusivo=True, ahora=ahora))
+        self.assertIsNone(validar_rango_no_futuro(date(2026, 1, 1), date(2026, 11, 24), ahora=ahora))
+        self.assertIsNotNone(validar_rango_no_futuro(hoy_ini, man_ini + timedelta(days=1), fin_exclusivo=True, ahora=ahora))
+        self.assertIsNotNone(validar_rango_no_futuro(man_ini, None, ahora=ahora))
+        self.assertIsNotNone(validar_rango_no_futuro(None, date(2026, 11, 25), ahora=ahora))
+
+    def _rango_dias(self, desplazamiento_fin):
+        from app.utils.fechas import ZONA_HORARIA_APP, hoy_app
+        hoy = hoy_app()
+        inicio = datetime.combine(hoy - timedelta(days=3), datetime.min.time(), ZONA_HORARIA_APP)
+        fin = datetime.combine(hoy + timedelta(days=desplazamiento_fin), datetime.min.time(), ZONA_HORARIA_APP)
+        return inicio.isoformat(), fin.isoformat()
+
+    def test_api_rechaza_fechas_futuras(self):
+        from urllib.parse import urlencode
+        parcela_id = self.crear_parcela()
+        h = self.headers(3)
+        # Reporte: fin exclusivo = mañana 00:00 (incluye hoy) ok; pasado mañana = futuro.
+        with patch("app.routes.reportes_routes.generar_reporte_parcela", return_value={}) as generar:
+            inicio, fin = self._rango_dias(2)
+            r = self.client.get(f"/api/reportes/{parcela_id}?" + urlencode({"inicio": inicio, "fin": fin}), headers=h)
+            self.assertEqual(r.status_code, 400, r.get_json())
+            self.assertIn("posteriores a hoy", r.get_json()["error"])
+            generar.assert_not_called()
+            inicio, fin = self._rango_dias(1)
+            r = self.client.get(f"/api/reportes/{parcela_id}?" + urlencode({"inicio": inicio, "fin": fin}), headers=h)
+            self.assertEqual(r.status_code, 200, r.get_json())
+        # Bitácora: día de mañana rechazado; hoy aceptado.
+        from app.utils.fechas import hoy_app
+        hoy = hoy_app()
+        r = self.client.get(f"/api/bitacora?parcela_id={parcela_id}&inicio={hoy}&fin={hoy + timedelta(days=1)}", headers=h)
+        self.assertEqual(r.status_code, 400, r.get_json())
+        r = self.client.get(f"/api/bitacora?parcela_id={parcela_id}&inicio={hoy}&fin={hoy}", headers=h)
+        self.assertEqual(r.status_code, 200, r.get_json())
+        # Histórico: se rechaza antes de consultar InfluxDB.
+        inicio, fin = self._rango_dias(2)
+        r = self.client.get(f"/api/sensores/historico?" + urlencode({"parcela_id": parcela_id, "inicio": inicio, "fin": fin}), headers=h)
+        self.assertEqual(r.status_code, 400, r.get_json())
+        self.assertIn("posteriores a hoy", r.get_json()["error"])
+
+    def test_reporte_sin_datos_no_genera_archivo(self):
+        from urllib.parse import urlencode
+        from app.services.reportes_service import reporte_tiene_datos
+        parcela_id = self.crear_parcela()
+        vacio = {
+            "sensores": {"estadisticas": {"humedad": {"lecturas": 0}},
+                         "precipitacion": {"lluvia_acum_ultima_lectura_mm": None}},
+            "eventos": {"bitacora": {"total_eventos": 0},
+                        "comandos": {"ordenes_creadas": 0, "comandos_confirmados": 0},
+                        "alertas": {"total": 0}},
+        }
+        con_datos = json.loads(json.dumps(vacio))
+        con_datos["sensores"]["estadisticas"]["humedad"]["lecturas"] = 5
+        self.assertFalse(reporte_tiene_datos(vacio))
+        self.assertTrue(reporte_tiene_datos(con_datos))
+        inicio, fin = self._rango_dias(1)
+        base = f"/api/reportes/{parcela_id}?"
+        with patch("app.routes.reportes_routes.generar_reporte_parcela", return_value=vacio), \
+             patch("app.routes.reportes_routes.generar_csv") as csv, \
+             patch("app.routes.reportes_routes.generar_pdf") as pdf:
+            for formato in ("csv", "pdf"):
+                r = self.client.get(base + urlencode({"inicio": inicio, "fin": fin, "formato": formato}), headers=self.headers(3))
+                self.assertEqual(r.status_code, 404)
+                self.assertTrue(r.get_json()["sin_datos"])
+                self.assertIn("No hay información", r.get_json()["error"])
+            csv.assert_not_called()
+            pdf.assert_not_called()
+            r = self.client.get(base + urlencode({"inicio": inicio, "fin": fin}), headers=self.headers(3))
+            self.assertEqual(r.status_code, 200)
+            self.assertFalse(r.get_json()["tiene_datos"])
+        with patch("app.routes.reportes_routes.generar_reporte_parcela", return_value=con_datos), \
+             patch("app.routes.reportes_routes.generar_csv", return_value=b"a,b\n1,2\n"):
+            r = self.client.get(base + urlencode({"inicio": inicio, "fin": fin, "formato": "csv"}), headers=self.headers(3))
+            self.assertEqual(r.status_code, 200)
+            self.assertIn("text/csv", r.content_type)
+
+
+    # ---- Bloque 4: guardar Configuración (alertas) ----
+    def test_config_alertas_sin_config_y_persistencia(self):
+        parcela_id = self.crear_parcela()
+        ruta = f"/api/alertas/config?parcela_id={parcela_id}"
+        r = self.client.get(ruta, headers=self.headers(3))
+        self.assertEqual(r.status_code, 200)
+        self.assertIsNone(r.get_json()["configuracion"])
+        datos = {"parcela_id": parcela_id, "humedad_suelo_min": 30, "temperatura_min": 12.5,
+                 "correo_destino": None, "activa": True, "cooldown_minutos": 60}
+        r = self.client.post("/api/alertas/config", headers=self.headers(3), json=datos)
+        self.assertEqual(r.status_code, 201, r.get_json())
+        r = self.client.post("/api/alertas/config", headers=self.headers(3),
+                             json={**datos, "humedad_suelo_min": 40, "correo_destino": "usuario@dominio.com"})
+        self.assertEqual(r.status_code, 200, r.get_json())
+        guardada = self.client.get(ruta, headers=self.headers(3)).get_json()["configuracion"]
+        self.assertEqual((guardada["humedad_suelo_min"], guardada["temperatura_min"], guardada["correo_destino"]),
+                         (40.0, 12.5, "usuario@dominio.com"))
+        self.assertEqual(self.client.get(ruta, headers=self.headers(4)).status_code, 403)
+
+    def test_config_alertas_error_bd_responde_json_y_se_registra(self):
+        from sqlalchemy.exc import OperationalError
+        parcela_id = self.crear_parcela()
+        datos = {"parcela_id": parcela_id, "humedad_suelo_min": 30, "temperatura_min": 12,
+                 "activa": True, "cooldown_minutos": 60}
+        caida = OperationalError("SELECT 1", {}, Exception("Lost connection to MySQL server"))
+        self.app.config["PROPAGATE_EXCEPTIONS"] = False
+        # Fallo al confirmar: lo controla la ruta.
+        with patch("app.routes.alertas_routes.db.session.commit", side_effect=caida), \
+             self.assertLogs(self.app.logger, level="ERROR"):
+            r = self.client.post("/api/alertas/config", headers=self.headers(3), json=datos)
+        self.assertEqual(r.status_code, 503)
+        self.assertIn("No se pudo guardar", r.get_json()["error"])
+        # Fallo fuera de la ruta (p. ej. conexión caducada en la primera consulta):
+        # el manejador global responde JSON y registra la traza.
+        with patch("app.routes.alertas_routes.comprobar_acceso", side_effect=caida), \
+             self.assertLogs(self.app.logger, level="ERROR"):
+            r = self.client.post("/api/alertas/config", headers=self.headers(3), json=datos)
+        self.assertEqual(r.status_code, 503)
+        self.assertIn("base de datos", r.get_json()["error"])
+        with patch("app.routes.alertas_routes.comprobar_acceso", side_effect=RuntimeError("x")), \
+             self.assertLogs(self.app.logger, level="ERROR"):
+            r = self.client.post("/api/alertas/config", headers=self.headers(3), json=datos)
+        self.assertEqual(r.status_code, 500)
+        self.assertEqual(r.get_json()["error"], "Error interno del servidor.")
+        # Los 404 normales siguen siendo 404.
+        self.assertEqual(self.client.get("/api/no-existe", headers=self.headers(3)).status_code, 404)
+
+    def test_pool_verifica_conexiones(self):
+        from app.config import Config
+        self.assertTrue(Config.SQLALCHEMY_ENGINE_OPTIONS["pool_pre_ping"])
+        with self.app.app_context():
+            self.assertTrue(db.engine.pool._pre_ping)
+
+    def test_lecturas_actuales_sin_influx_responden_503_json(self):
+        parcela_id = self.crear_parcela()
+        self.crear_nodo(parcela_id)
+        rutas = (
+            f"/api/sensores/actual?parcela_id={parcela_id}",
+            f"/api/sensores/actual/sensor-{parcela_id}",
+            f"/api/sensores/estacion?parcela_id={parcela_id}",
+        )
+        with patch("app.routes.sensores_routes._cliente_influx",
+                   side_effect=ConnectionError("influx caído")),                 self.assertLogs(self.app.logger, level="ERROR") as registros:
+            for ruta in rutas:
+                with self.subTest(ruta=ruta):
+                    respuesta = self.client.get(ruta, headers=self.headers(3))
+                    self.assertEqual(respuesta.status_code, 503)
+                    datos = respuesta.get_json()
+                    self.assertTrue(datos["servicio_no_disponible"])
+                    self.assertIn("InfluxDB", datos["error"])
+                    self.assertNotIn("influx caído", datos["error"])
+        self.assertEqual(len(registros.records), len(rutas))
+        # Los permisos se siguen comprobando antes de consultar InfluxDB.
+        ajena = self.client.get(f"/api/sensores/actual?parcela_id={parcela_id}",
+                                headers=self.headers(4))
+        self.assertEqual(ajena.status_code, 403)
+
+    def test_modo_debug_apagado_por_defecto(self):
+        from app.config import modo_debug
+        with patch.dict(os.environ, {}, clear=False):
+            os.environ.pop("FLASK_DEBUG", None)
+            self.assertFalse(modo_debug())
+        for valor, esperado in (("1", True), ("true", True), (" On ", True), ("yes", True),
+                                ("0", False), ("false", False), ("", False), ("debug", False)):
+            with self.subTest(valor=valor), patch.dict(os.environ, {"FLASK_DEBUG": valor}):
+                self.assertEqual(modo_debug(), esperado)
 
 
 if __name__ == "__main__":

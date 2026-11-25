@@ -10,6 +10,7 @@ from flask_jwt_extended import (
 
 from ..extensions import db
 from ..models import Bitacora, Nodo, Parcela
+from ..utils.fechas import validar_rango_no_futuro
 
 
 bitacora_bp = Blueprint("bitacora", __name__)
@@ -126,6 +127,15 @@ def listar_bitacora():
         return jsonify({
             "error": "La fecha inicio debe ser anterior a fin"
         }), 400
+
+    # Una fecha sola (AAAA-MM-DD) se compara como día; con hora, en la zona
+    # de la aplicación.
+    error_futuro = validar_rango_no_futuro(
+        date.fromisoformat(inicio_texto) if inicio_texto and len(inicio_texto) == 10 else inicio,
+        date.fromisoformat(fin_texto) if fin_texto and len(fin_texto) == 10 else fin,
+    )
+    if error_futuro:
+        return jsonify({"error": error_futuro}), 400
 
     # 2. Verificar permisos sobre la parcela solicitada
     if parcela_id is not None:

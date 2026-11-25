@@ -2,6 +2,8 @@ import { useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import logoImg from "../assets/agroia-logo.png";
 import "./Login.css";
+import { validarPassword } from "../utils/validaciones";
+import { mostrarError, mostrarExito } from "../utils/dialogos";
 
 const API_URL = (
   import.meta.env.VITE_API_URL || "http://localhost:5000/api"
@@ -13,19 +15,19 @@ export default function RestablecerPassword() {
   const [passwordNueva, setPasswordNueva] = useState("");
   const [confirmacion, setConfirmacion] = useState("");
   const [cargando, setCargando] = useState(false);
-  const [mensaje, setMensaje] = useState("");
-  const [error, setError] = useState("");
+  const [completado, setCompletado] = useState(false);
 
   const guardar = async (evento) => {
     evento.preventDefault();
     if (cargando) return;
-    setError("");
-    if (passwordNueva.length < 12 || passwordNueva.length > 128) {
-      setError("La nueva contraseña debe tener entre 12 y 128 caracteres.");
+    const tituloError = "No se pudo cambiar la contraseña";
+    const errorPassword = validarPassword(passwordNueva);
+    if (errorPassword) {
+      mostrarError(tituloError, errorPassword);
       return;
     }
     if (passwordNueva !== confirmacion) {
-      setError("Las contraseñas no coinciden.");
+      mostrarError(tituloError, "Las contraseñas no coinciden.");
       return;
     }
     setCargando(true);
@@ -39,13 +41,14 @@ export default function RestablecerPassword() {
       if (!respuesta.ok) {
         throw new Error(datos.error || "No fue posible cambiar la contraseña.");
       }
-      setMensaje(datos.mensaje || "Contraseña actualizada correctamente.");
+      setCompletado(true);
+      mostrarExito("Contraseña actualizada", datos.mensaje || "Contraseña actualizada correctamente. Ya puedes iniciar sesión.");
       setPasswordNueva("");
       setConfirmacion("");
       // Quitar el enlace secreto del historial visible del navegador.
       window.history.replaceState({}, "", "/restablecer-password");
     } catch (err) {
-      setError(err.message || "No se pudo conectar con el servidor.");
+      mostrarError(tituloError, err.message || "No se pudo conectar con el servidor.");
     } finally {
       setCargando(false);
     }
@@ -61,9 +64,9 @@ export default function RestablecerPassword() {
         </div>
         <div className="right-panel">
           <h2 className="login-title">Nueva contraseña</h2>
-          {mensaje ? (
+          {completado ? (
             <>
-              <p role="status" style={{ textAlign: "center", color: "#2F5413" }}>{mensaje}</p>
+              <p style={{ textAlign: "center" }}>Ya puedes iniciar sesión con tu nueva contraseña.</p>
               <Link to="/login" className="login-button" style={{ textDecoration: "none", textAlign: "center" }}>
                 Ir a iniciar sesión
               </Link>
@@ -75,7 +78,7 @@ export default function RestablecerPassword() {
             </>
           ) : (
             <form className="login-form" onSubmit={guardar}>
-              <label htmlFor="password-nueva">Nueva contraseña (mínimo 12 caracteres)</label>
+              <label htmlFor="password-nueva">Nueva contraseña (12 a 128 caracteres, con letras y números)</label>
               <input
                 id="password-nueva"
                 type="password"
@@ -99,7 +102,6 @@ export default function RestablecerPassword() {
                 value={confirmacion}
                 onChange={(e) => setConfirmacion(e.target.value)}
               />
-              {error && <p role="alert" className="error-text">{error}</p>}
               <button type="submit" className="login-button" disabled={cargando}>
                 {cargando ? "Guardando..." : "Restablecer contraseña"}
               </button>

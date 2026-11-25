@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import logoAgroIA from "../assets/agroia-logo.png";
 import Notificaciones from "../components/AvisosPanel";
+import { finDiaApp, hoyApp, inicioDiaApp, sumarDias, validarRangoFechas } from "../utils/fechas";
 
 const API_URL = (
   import.meta.env.VITE_API_URL || "http://localhost:5000/api"
@@ -150,12 +151,8 @@ export default function Bitacoras({ usuario, onLogout }) {
   const [cargandoInicial, setCargandoInicial] = useState(true);
   const [errorInicial, setErrorInicial] = useState("");
 
-  const [desde, setDesde] = useState(() => {
-    const fecha = new Date();
-    fecha.setDate(fecha.getDate() - 29);
-    return fechaInput(fecha);
-  });
-  const [hasta, setHasta] = useState(() => fechaInput(new Date()));
+  const [desde, setDesde] = useState(() => sumarDias(hoyApp(), -29));
+  const [hasta, setHasta] = useState(() => hoyApp());
   const [pagina, setPagina] = useState(1);
   const [registros, setRegistros] = useState([]);
   const [cargando, setCargando] = useState(false);
@@ -203,8 +200,9 @@ export default function Bitacoras({ usuario, onLogout }) {
       setCargando(false);
       return () => controller.abort();
     }
-    if (!desde || !hasta || desde > hasta) {
-      setError("Selecciona un rango de fechas válido.");
+    const errorRango = validarRangoFechas(desde, hasta);
+    if (errorRango) {
+      setError(errorRango);
       setCargando(false);
       return () => controller.abort();
     }
@@ -212,9 +210,9 @@ export default function Bitacoras({ usuario, onLogout }) {
     async function cargarRegistros() {
       setCargando(true);
       try {
-        // La API guarda las fechas en UTC. Enviamos los límites del día local con su zona horaria.
-        const inicio = new Date(`${desde}T00:00:00`);
-        const fin = new Date(`${hasta}T23:59:59.999`);
+        // La API guarda las fechas en UTC. Enviamos los límites del día en la zona de la aplicación.
+        const inicio = inicioDiaApp(desde);
+        const fin = finDiaApp(hasta);
         const parametros = new URLSearchParams({
           parcela_id: String(parcelaId),
           inicio: inicio.toISOString(),
@@ -396,11 +394,11 @@ export default function Bitacoras({ usuario, onLogout }) {
             </label>
             <label style={styles.filtroCampo}>
               <span style={{ fontSize: 10, color: "#777" }}>Desde</span>
-              <input type="date" value={desde} max={hasta} onChange={(e) => { setDesde(e.target.value); setPagina(1); }} style={styles.dateInput} />
+              <input type="date" value={desde} max={hasta < hoyApp() ? hasta : hoyApp()} onChange={(e) => { setDesde(e.target.value); setPagina(1); }} style={styles.dateInput} />
             </label>
             <label style={styles.filtroCampo}>
               <span style={{ fontSize: 10, color: "#777" }}>Hasta</span>
-              <input type="date" value={hasta} min={desde} onChange={(e) => { setHasta(e.target.value); setPagina(1); }} style={styles.dateInput} />
+              <input type="date" value={hasta} min={desde} max={hoyApp()} onChange={(e) => { setHasta(e.target.value); setPagina(1); }} style={styles.dateInput} />
             </label>
             <button type="button" onClick={() => window.print()}
               disabled={cargando || cargandoInicial || !!error || !!errorInicial || !parcelaId}

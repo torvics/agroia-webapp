@@ -1,0 +1,22 @@
+/* Diálogos SweetAlert2 de AgroIA */
+.swal2-container {
+  z-index: 4000; /* por encima del modal del mapa (3000) */
+}
+
+.agroia-swal {
+  font-family: Arial, sans-serif;
+  border-radius: 14px;
+  color: #28342b;
+  max-width: calc(100vw - 32px);
+}
+
+.agroia-swal .swal2-title {
+  font-size: 1.3em;
+}
+
+/* Permite listas de cambios con saltos de línea sin usar HTML. */
+.agroia-swal .swal2-html-container {
+  white-space: pre-line;
+  font-size: 0.95em;
+  overflow-wrap: anywhere;
+}

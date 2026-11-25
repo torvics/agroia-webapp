@@ -11,7 +11,10 @@ from ..services.reportes_export_service import ( generar_csv, generar_pdf)
 
 from ..extensions import db
 from ..models import Parcela
-from ..services.reportes_service import generar_reporte_parcela
+from ..services.reportes_service import (
+    generar_reporte_parcela, reporte_tiene_datos
+)
+from ..utils.fechas import validar_rango_no_futuro
 
 
 reportes_bp = Blueprint("reportes", __name__)
@@ -118,6 +121,10 @@ def obtener_reporte(parcela_id):
             )
         }), 400
 
+    error_futuro = validar_rango_no_futuro(inicio, fin, fin_exclusivo=True)
+    if error_futuro:
+        return jsonify({"error": error_futuro}), 400
+
 
     # Validar el formato solicitado
     formato = request.args.get(
@@ -141,7 +148,13 @@ def obtener_reporte(parcela_id):
             fin=fin
         )
 
-        if formato == "csv":
+        tiene_datos = reporte_tiene_datos(reporte)
+        reporte["tiene_datos"] = tiene_datos
+
+        if formato != "json" and not tiene_datos:
+            contenido = None
+
+        elif formato == "csv":
             contenido = generar_csv(reporte)
             tipo_archivo = "text/csv"
 
@@ -163,7 +176,17 @@ def obtener_reporte(parcela_id):
     if formato == "json":
         return jsonify(reporte), 200
 
-    # 8. Descargar el archivo solicitado
+    # 8. Sin datos no se genera un archivo en blanco
+    if not tiene_datos:
+        return jsonify({
+            "error": (
+                "No hay información disponible para la parcela "
+                "y el periodo seleccionados. No se generó el archivo."
+            ),
+            "sin_datos": True,
+        }), 404
+
+    # 9. Descargar el archivo solicitado
     nombre = (
         f"reporte_parcela_{parcela_id}_"
         f"{inicio:%Y%m%d}_{fin:%Y%m%d}.{formato}"
@@ -175,6 +198,3 @@ def obtener_reporte(parcela_id):
         as_attachment=True,
         download_name=nombre
     )
-
-    # 7. Devolver el resultado
-    return jsonify(reporte), 200

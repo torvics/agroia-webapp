@@ -9,11 +9,22 @@ import json, math
 from ..extensions import db
 from ..models import Nodo, Parcela
 from ..utils.auth_nodo import requiere_api_key
+from ..utils.fechas import validar_rango_no_futuro
 
 sensores_bp = Blueprint("sensores", __name__)
 estacion_bp = Blueprint("estacion", __name__)
 nodos_datos_bp = Blueprint("nodos_datos", __name__)
 lluvia_bp = Blueprint("lluvia", __name__)
+
+
+# Respuesta común cuando InfluxDB no responde: el front la muestra tal cual.
+MENSAJE_INFLUX_NO_DISPONIBLE = {
+    "error": (
+        "El servicio de lecturas de sensores (InfluxDB) no está disponible en "
+        "este momento. Inténtalo de nuevo en unos minutos."
+    ),
+    "servicio_no_disponible": True,
+}
 
 
 def _cliente_influx():
@@ -249,9 +260,9 @@ def sensores_actual(identificador_nodo):
     # Preparar los filtros de InfluxDB
     identificador_flux = json.dumps(nodo.identificador)
 
-    client, _ = _cliente_influx()
-
+    client = None
     try:
+        client, _ = _cliente_influx()
         flux = f'''
         from(bucket: "{current_app.config["INFLUXDB_BUCKET"]}")
           |> range(start: -1h)
@@ -271,8 +282,14 @@ def sensores_actual(identificador_nodo):
             for record in table.records:
                 resultado[record.get_field()] = record.get_value()
 
+    except Exception:
+        current_app.logger.exception(
+            "Error consultando lecturas actuales en InfluxDB (%s)", request.path
+        )
+        return jsonify(MENSAJE_INFLUX_NO_DISPONIBLE), 503
     finally:
-        client.close()
+        if client is not None:
+            client.close()
 
     return jsonify(resultado), 200
 
@@ -307,9 +324,9 @@ def sensores_estacion_actual():
                 "error": "No autorizado para consultar esta parcela"
             }), 403
 
-    client, _ = _cliente_influx()
-
+    client = None
     try:
+        client, _ = _cliente_influx()
         flux = f'''
         from(bucket: "{current_app.config["INFLUXDB_BUCKET"]}")
           |> range(start: -1h)
@@ -328,8 +345,14 @@ def sensores_estacion_actual():
             for record in table.records:
                 resultado[record.get_field()] = record.get_value()
 
+    except Exception:
+        current_app.logger.exception(
+            "Error consultando lecturas actuales en InfluxDB (%s)", request.path
+        )
+        return jsonify(MENSAJE_INFLUX_NO_DISPONIBLE), 503
     finally:
-        client.close()
+        if client is not None:
+            client.close()
 
     return jsonify(resultado), 200
 
@@ -633,8 +656,6 @@ def sensores_actual_parcela():
                 "error": "No autorizado para consultar esta parcela"
             }), 403
 
-    client, _ = _cliente_influx()
-
     bucket = current_app.config["INFLUXDB_BUCKET"]
 
     # Buscamos las últimas lecturas de las últimas 24 horas.
@@ -652,10 +673,19 @@ def sensores_actual_parcela():
       |> last()
     '''
 
+    client = None
     try:
+        client, _ = _cliente_influx()
         tables = client.query_api().query(flux)
+    except Exception:
+        current_app.logger.exception(
+            "Error consultando lecturas actuales en InfluxDB (parcela %s)",
+            parcela_id,
+        )
+        return jsonify(MENSAJE_INFLUX_NO_DISPONIBLE), 503
     finally:
-        client.close()
+        if client is not None:
+            client.close()
 
     estaciones = {}
     nodos = {}
@@ -824,6 +854,10 @@ def sensores_historico():
         return jsonify({
             "error": "El rango máximo por consulta es de 31 días"
         }), 400
+
+    error_futuro = validar_rango_no_futuro(inicio, fin)
+    if error_futuro:
+        return jsonify({"error": error_futuro}), 400
 
     # Intervalos permitidos para las gráficas.
     # raw devuelve las lecturas originales.

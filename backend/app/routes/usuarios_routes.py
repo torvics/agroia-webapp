@@ -2,6 +2,7 @@ from flask import Blueprint, jsonify
 from flask_jwt_extended import jwt_required, get_jwt
 
 from ..models import Usuario
+from ..utils.validaciones import validar_correo, validar_nombre_persona, validar_password
 
 usuarios_bp = Blueprint("usuarios", __name__)
 
@@ -38,17 +39,17 @@ def agroia_registrar_usuario():
     datos = agroia_request.get_json(silent=True)
     if not isinstance(datos, dict):
         return jsonify({"error": "Se requiere un objeto JSON válido."}), 400
-    nombre = str(datos.get("nombre") or "").strip()
-    correo = str(datos.get("correo") or "").strip().lower()
-    password = datos.get("password")
     rol = datos.get("rol", "agricultor")
 
-    if len(nombre) < 2 or len(nombre) > 100:
-        return jsonify({"error": "El nombre debe tener entre 2 y 100 caracteres."}), 400
-    if len(correo) > 150 or not correo or "@" not in correo or " " in correo:
-        return jsonify({"error": "Introduce un correo válido."}), 400
-    if not isinstance(password, str) or not (8 <= len(password) <= 128):
-        return jsonify({"error": "La contraseña debe tener entre 8 y 128 caracteres."}), 400
+    nombre, error = validar_nombre_persona(datos.get("nombre"))
+    if error:
+        return jsonify({"error": error}), 400
+    correo, error = validar_correo(datos.get("correo"))
+    if error:
+        return jsonify({"error": error}), 400
+    password, error = validar_password(datos.get("password"))
+    if error:
+        return jsonify({"error": error}), 400
     if rol not in ("admin", "agricultor"):
         return jsonify({"error": "Rol inválido."}), 400
     if Usuario.query.filter_by(correo=correo).first():
@@ -117,10 +118,16 @@ def editar_usuario_gestion(usuario_id):
     correo = datos.get("correo",usuario.correo)
     rol = datos.get("rol",usuario.rol)
     activo = datos.get("activo",usuario.activo)
-    if not isinstance(nombre,str) or not (2 <= len(nombre.strip()) <= 100):
-        return jsonify({"error": "Nombre inválido."}), 400
-    if not isinstance(correo,str) or not correo.strip() or "@" not in correo or " " in correo or len(correo.strip()) > 150:
-        return jsonify({"error": "Correo inválido."}), 400
+    # Solo se exige la regla al nombre que cambia, para no bloquear la edición
+    # de otros campos en cuentas antiguas.
+    if nombre != usuario.nombre:
+        nombre, error = validar_nombre_persona(nombre)
+        if error:
+            return jsonify({"error": error}), 400
+    if not isinstance(correo, str) or correo.strip().lower() != usuario.correo.lower():
+        correo, error = validar_correo(correo)
+        if error:
+            return jsonify({"error": error}), 400
     if rol not in ("admin","agricultor") or not isinstance(activo,bool):
         return jsonify({"error": "Rol o estado inválido."}), 400
     if str(identidad_gestion()) == str(usuario_id) and (rol != "admin" or activo is False):
