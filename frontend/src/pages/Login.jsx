@@ -1,7 +1,8 @@
 import { useState } from "react";
 import logoImg from "../assets/agroia-logo.png";
 import "./Login.css"; 
-import RecuperarContra from "../components/recuperarcontra"; 
+import RecuperarContra from "../components/recuperarcontra";
+import { mostrarError } from "../utils/dialogos";
 
 const API_URL = (
   import.meta.env.VITE_API_URL || "http://localhost:5000/api"
@@ -10,13 +11,12 @@ const API_URL = (
 export default function Login({ onLogin }) {
   const [correo, setCorreo] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
   const [cargando, setCargando] = useState(false);
   const [modalAbierto, setModalAbierto] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setError("");
+    if (cargando) return;
     setCargando(true);
 
     try {
@@ -25,10 +25,10 @@ export default function Login({ onLogin }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ correo: correo.trim(), password }),
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
 
       if (!res.ok) {
-        setError(data.error || "Credenciales inválidas");
+        mostrarError("No se pudo iniciar sesión", data.error || "Credenciales inválidas");
         return;
       }
 
@@ -40,7 +40,7 @@ export default function Login({ onLogin }) {
 
       onLogin(data); // data trae access_token, rol y nombre
     } catch {
-      setError("No se pudo conectar con el servidor");
+      mostrarError("No se pudo iniciar sesión", "No se pudo conectar con el servidor");
     } finally {
       setCargando(false);
     }
@@ -80,7 +80,6 @@ export default function Login({ onLogin }) {
               {cargando ? "ENTRANDO..." : "INICIAR SESIÓN"}
             </button>
 
-            {error && <p className="error-text">{error}</p>}
           </form>
 
           <div className="recover-container">

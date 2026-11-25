@@ -5,6 +5,7 @@ import logoAgroIA from "../assets/agroia-logo.png";
 import { leerPreferenciasAvisos, guardarPreferenciasAvisos } from "../components/avisosUtils";
 import Notificaciones from "../components/AvisosPanel";
 import { validarCorreo, validarNombrePersona, validarPassword } from "../utils/validaciones";
+import { mostrarAviso, mostrarError, mostrarExito } from "../utils/dialogos";
 
 const API_URL = (
   import.meta.env.VITE_API_URL || "http://localhost:5000/api"
@@ -15,7 +16,7 @@ export default function ConfigCuenta({ onLogout }) {
   const [menuAbierto, setMenuAbierto] = useState(false);
   const [perfil, setPerfil] = useState(null);
   const [cargandoPerfil, setCargandoPerfil] = useState(true);
-  const [errorPerfil, setErrorPerfil] = useState("");
+  const [errorPerfil, setErrorPerfil] = useState(""); // solo fallos al cargar el perfil
   const [cerrandoSesion, setCerrandoSesion] = useState(false);
   const [preferenciasAvisos, setPreferenciasAvisos] = useState(() => leerPreferenciasAvisos());
   // Edición de perfil
@@ -27,7 +28,6 @@ export default function ConfigCuenta({ onLogout }) {
   const [correoFormulario, setCorreoFormulario] = useState("");
   const [passwordActualCorreo, setPasswordActualCorreo] = useState("");
   const [guardandoPerfil, setGuardandoPerfil] = useState(false);
-  const [mensajePerfil, setMensajePerfil] = useState("");
   // Cambio de contraseña
   const [passwordActual, setPasswordActual] = useState("");
   const [passwordNueva, setPasswordNueva] = useState("");
@@ -117,8 +117,6 @@ const iniciarEdicion = (campo) => {
   setPasswordNueva("");
   setConfirmarPassword("");
 
-  setErrorPerfil("");
-  setMensajePerfil("");
   setCampoEditando(campo);
 };
 
@@ -130,15 +128,12 @@ const cancelarEdicion = () => {
   setPasswordNueva("");
   setConfirmarPassword("");
 
-  setErrorPerfil("");
   setCampoEditando(null);
 };
 
 const guardarPerfil = async () => {
   if (guardandoPerfil || !perfil || !campoEditando) return;
 
-  setErrorPerfil("");
-  setMensajePerfil("");
 
   // Solo enviaremos el campo que se está editando.
   const cuerpo = {};
@@ -148,13 +143,13 @@ const guardarPerfil = async () => {
 
     const errorNombre = validarNombrePersona(nuevoNombre);
     if (errorNombre) {
-      setErrorPerfil(errorNombre);
+      mostrarError("No se pudo actualizar el perfil", errorNombre);
       return;
     }
 
     if (nuevoNombre === perfil.nombre) {
       setCampoEditando(null);
-      setMensajePerfil("No se realizaron cambios.");
+      mostrarAviso("Sin cambios", "No se realizaron cambios en el perfil.");
       return;
     }
 
@@ -166,19 +161,19 @@ const guardarPerfil = async () => {
 
     const errorCorreo = validarCorreo(nuevoCorreo);
     if (errorCorreo) {
-      setErrorPerfil(errorCorreo);
+      mostrarError("No se pudo actualizar el perfil", errorCorreo);
       return;
     }
 
     if (nuevoCorreo === perfil.correo.toLowerCase()) {
       setCampoEditando(null);
       setPasswordActualCorreo("");
-      setMensajePerfil("No se realizaron cambios.");
+      mostrarAviso("Sin cambios", "No se realizaron cambios en el perfil.");
       return;
     }
 
     if (!passwordActualCorreo) {
-      setErrorPerfil(
+      mostrarError("No se pudo actualizar el perfil",
         "Introduce tu contraseña actual para cambiar el correo."
       );
       return;
@@ -193,7 +188,7 @@ const guardarPerfil = async () => {
     localStorage.getItem("token");
 
   if (!token) {
-    setErrorPerfil("La sesión ha expirado. Inicia sesión nuevamente.");
+    mostrarError("No se pudo actualizar el perfil", "La sesión ha expirado. Inicia sesión nuevamente.");
     return;
   }
 
@@ -209,7 +204,7 @@ const guardarPerfil = async () => {
       body: JSON.stringify(cuerpo),
     });
 
-    const resultado = await respuesta.json();
+    const resultado = await respuesta.json().catch(() => ({}));
 
     if (!respuesta.ok) {
       throw new Error(
@@ -227,9 +222,9 @@ const guardarPerfil = async () => {
     localStorage.setItem("nombre", perfilActualizado.nombre);
 
     setCampoEditando(null);
-    setMensajePerfil("Perfil actualizado correctamente.");
+    mostrarExito("Perfil actualizado", "Los cambios de tu cuenta se guardaron correctamente.");
   } catch (error) {
-    setErrorPerfil(error.message);
+    mostrarError("No se pudo actualizar el perfil", error);
   } finally {
     setGuardandoPerfil(false);
   }
@@ -240,29 +235,27 @@ const guardarPerfil = async () => {
 const cambiarPassword = async () => {
   if (guardandoPassword || campoEditando !== "password") return;
 
-  setErrorPerfil("");
-  setMensajePerfil("");
 
   // Validar que los tres campos estén completos.
   if (!passwordActual || !passwordNueva || !confirmarPassword) {
-    setErrorPerfil("Debes completar los tres campos.");
+    mostrarError("No se pudo cambiar la contraseña", "Debes completar los tres campos.");
     return;
   }
 
   // Respetar las validaciones implementadas en Flask.
   const errorPassword = validarPassword(passwordNueva);
   if (errorPassword) {
-    setErrorPerfil(errorPassword);
+    mostrarError("No se pudo cambiar la contraseña", errorPassword);
     return;
   }
 
   if (passwordNueva !== confirmarPassword) {
-    setErrorPerfil("Las contraseñas nuevas no coinciden.");
+    mostrarError("No se pudo cambiar la contraseña", "Las contraseñas nuevas no coinciden.");
     return;
   }
 
   if (passwordActual === passwordNueva) {
-    setErrorPerfil(
+    mostrarError("No se pudo cambiar la contraseña",
       "La nueva contraseña debe ser diferente de la actual."
     );
     return;
@@ -273,7 +266,7 @@ const cambiarPassword = async () => {
     localStorage.getItem("token");
 
   if (!token) {
-    setErrorPerfil("La sesión ha expirado. Inicia sesión nuevamente.");
+    mostrarError("No se pudo cambiar la contraseña", "La sesión ha expirado. Inicia sesión nuevamente.");
     return;
   }
 
@@ -295,7 +288,7 @@ const cambiarPassword = async () => {
       }
     );
 
-    const resultado = await respuesta.json();
+    const resultado = await respuesta.json().catch(() => ({}));
 
     if (!respuesta.ok) {
       throw new Error(
@@ -318,10 +311,14 @@ const cambiarPassword = async () => {
     setConfirmarPassword("");
 
     // Se requiere iniciar sesión con la contraseña nueva.
+    await mostrarExito(
+      "Contraseña actualizada",
+      "Por seguridad se cerró tu sesión. Inicia sesión con la contraseña nueva."
+    );
     window.location.replace("/login");
 
   } catch (error) {
-    setErrorPerfil(error.message);
+    mostrarError("No se pudo cambiar la contraseña", error);
   } finally {
     setGuardandoPassword(false);
   }
@@ -545,11 +542,8 @@ const cambiarPassword = async () => {
             <h1 style={styles.pageTitle}>Cuenta</h1>
 
             {errorPerfil && (
-              <p style={{ color: "#b42318" }}>{errorPerfil}</p>
-            )}
-            {mensajePerfil && (
-              <p style={{ color: "#2F5413", fontWeight: "bold" }}>
-                {mensajePerfil}
+              <p role="alert" style={{ color: "#b42318" }}>
+                No se pudo cargar tu perfil: {errorPerfil}
               </p>
             )}
 

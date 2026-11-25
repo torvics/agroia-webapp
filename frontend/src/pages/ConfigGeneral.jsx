@@ -3,6 +3,7 @@ import { useNavigate, Link, useLocation } from "react-router-dom";
 import logoAgroIA from "../assets/agroia-logo.png";
 import Notificaciones from "../components/AvisosPanel";
 import { validarCorreo } from "../utils/validaciones";
+import { confirmar, mostrarError, mostrarExito } from "../utils/dialogos";
 
 const API_URL = (
   import.meta.env.VITE_API_URL || "http://localhost:5000/api"
@@ -79,15 +80,11 @@ export default function ConfigGeneral({ usuario, onLogout }) {
   const [cargandoConfig, setCargandoConfig] = useState(false);
   const [guardando, setGuardando] = useState(false);
   const [hayCambios, setHayCambios] = useState(false);
-  const [errorConfig, setErrorConfig] = useState("");
   const [errorCargaConfig, setErrorCargaConfig] = useState("");
-  const [mensaje, setMensaje] = useState("");
   const [accionNodo, setAccionNodo] = useState("");
   const [identificadorNodo, setIdentificadorNodo] = useState("");
   const [tipoNuevoNodo, setTipoNuevoNodo] = useState("sensor_suelo");
   const [apiKeyNuevoNodo, setApiKeyNuevoNodo] = useState("");
-  const [errorNodo, setErrorNodo] = useState("");
-  const [exitoNodo, setExitoNodo] = useState("");
   const [guardandoNodo, setGuardandoNodo] = useState(false);
   const [intervaloPantalla, setIntervaloPantalla] = useState(() => { const n = Number(localStorage.getItem("agroia_intervalo_pantalla")); return [15,30,60,120].includes(n) ? n : 60; });
 
@@ -132,8 +129,6 @@ export default function ConfigGeneral({ usuario, onLogout }) {
   // Los umbrales son POR PARCELA; no por nodo individual.
   useEffect(() => {
     const controlador = new AbortController();
-    setMensaje("");
-    setErrorConfig("");
     setErrorCargaConfig("");
     setFormulario({ ...FORMULARIO_VACIO });
     setConfigExiste(false);
@@ -203,27 +198,23 @@ export default function ConfigGeneral({ usuario, onLogout }) {
     }));
 
     setHayCambios(true);
-    setMensaje("");
-    setErrorConfig("");
   };
 
   const guardarConfiguracion = async () => {
     // Siempre informar por qué no se puede guardar; nunca salir en silencio.
     if (guardando) return;
 
-    setErrorConfig("");
-    setMensaje("");
 
     if (!parcelaId) {
-      setErrorConfig("Selecciona una parcela antes de guardar.");
+      mostrarError("No se pudo guardar la configuración", "Selecciona una parcela antes de guardar.");
       return;
     }
     if (cargandoInicial || cargandoConfig) {
-      setErrorConfig("Espera a que termine de cargar la información antes de guardar.");
+      mostrarError("No se pudo guardar la configuración", "Espera a que termine de cargar la información antes de guardar.");
       return;
     }
     if (errorInicial || errorCargaConfig) {
-      setErrorConfig(
+      mostrarError("No se pudo guardar la configuración", 
         "No se puede guardar porque falló la carga de datos. Recarga la página para reintentar."
       );
       return;
@@ -235,7 +226,7 @@ export default function ConfigGeneral({ usuario, onLogout }) {
     const correo = String(formulario.correo_destino ?? "").trim();
 
     if (!humedadTexto || !temperaturaTexto) {
-      setErrorConfig("Debes indicar ambos umbrales para guardar la configuración.");
+      mostrarError("No se pudo guardar la configuración", "Debes indicar ambos umbrales para guardar la configuración.");
       return;
     }
 
@@ -244,19 +235,19 @@ export default function ConfigGeneral({ usuario, onLogout }) {
     const cooldown = Number(cooldownTexto);
 
     if (!Number.isFinite(humedad) || humedad < 0 || humedad > 100) {
-      setErrorConfig("La humedad mínima debe estar entre 0 y 100 %.");
+      mostrarError("No se pudo guardar la configuración", "La humedad mínima debe estar entre 0 y 100 %.");
       return;
     }
     if (!Number.isFinite(temperatura) || temperatura < -50 || temperatura > 60) {
-      setErrorConfig("La temperatura mínima debe estar entre -50 y 60 °C.");
+      mostrarError("No se pudo guardar la configuración", "La temperatura mínima debe estar entre -50 y 60 °C.");
       return;
     }
     if (!/^\d+$/.test(cooldownTexto) || !Number.isInteger(cooldown) || cooldown < 1 || cooldown > 10080) {
-      setErrorConfig("El tiempo entre alertas debe ser de 1 a 10080 minutos.");
+      mostrarError("No se pudo guardar la configuración", "El tiempo entre alertas debe ser de 1 a 10080 minutos.");
       return;
     }
     if (validarCorreo(correo, { opcional: true, maximo: 255 })) {
-      setErrorConfig("Correo de destino inválido: escribe un correo como usuario@dominio.com o deja el campo vacío.");
+      mostrarError("No se pudo guardar la configuración", "Correo de destino inválido: escribe un correo como usuario@dominio.com o deja el campo vacío.");
       return;
     }
 
@@ -298,13 +289,14 @@ export default function ConfigGeneral({ usuario, onLogout }) {
       if (!coincide) {
         throw new Error("Los valores recuperados no coinciden con los enviados. Revisa la configuración mostrada.");
       }
-      setMensaje("Configuración de alertas guardada y verificada correctamente.");
+      mostrarExito("Configuración guardada", "La configuración de alertas se guardó y se verificó correctamente.");
       setHayCambios(false);
     } catch (error) {
-      setErrorConfig(
+      mostrarError(
+        postAceptado ? "No se pudo verificar el guardado" : "No se pudo guardar la configuración",
         postAceptado
           ? `El servidor recibió el guardado, pero no se pudo verificar: ${error.message}`
-          : `No se pudo guardar la configuración: ${error.message}`
+          : error.message
       );
     } finally {
       setGuardando(false);
@@ -313,15 +305,21 @@ export default function ConfigGeneral({ usuario, onLogout }) {
 
   const guardarNodo = async () => {
     if (guardandoNodo) return;
-    setErrorNodo(""); setExitoNodo(""); setApiKeyNuevoNodo("");
+    setApiKeyNuevoNodo("");
+    const tituloError = accionNodo === "editar" ? "No se pudo renombrar el nodo" : "No se pudo crear el nodo";
     const identificador = identificadorNodo.trim();
     if (!/^[a-zA-Z0-9_-]{3,64}$/.test(identificador)) {
-      setErrorNodo("Identificador de 3 a 64 caracteres: letras, números, guiones y guiones bajos."); return;
+      mostrarError(tituloError, "Identificador de 3 a 64 caracteres: letras, números, guiones y guiones bajos."); return;
     }
     if (accionNodo === "editar") {
       const seleccionado = nodosSuelo.find(n => String(n.id) === String(nodoId));
-      if (!seleccionado) { setErrorNodo("Selecciona un nodo de suelo activo."); return; }
-      if (!window.confirm(`Cambiar el identificador de ${seleccionado.identificador} puede afectar al firmware y al histórico. ¿Confirmas el cambio?`)) return;
+      if (!seleccionado) { mostrarError(tituloError, "Selecciona un nodo de suelo activo."); return; }
+      const acepta = await confirmar({
+        titulo: `¿Renombrar «${seleccionado.identificador}» a «${identificador}»?`,
+        texto: "Cambiar el identificador puede afectar al firmware y al histórico.",
+        confirmar: "Renombrar",
+      });
+      if (!acepta) return;
     }
     setGuardandoNodo(true);
     try {
@@ -331,16 +329,16 @@ export default function ConfigGeneral({ usuario, onLogout }) {
       const creado = await consultarAPI(ruta, { method: editar ? "PUT" : "POST", body: payload });
       if (editar) {
         setNodos(anteriores => anteriores.map(n => Number(n.id) === Number(nodoId) ? { ...n, identificador: creado.identificador } : n));
-        setExitoNodo("Nombre actualizado en MySQL. Comprueba la configuración del firmware y las consultas históricas.");
+        mostrarExito("Nodo renombrado", `Ahora se llama «${creado.identificador}». Comprueba la configuración del firmware y las consultas históricas.`);
       } else {
         setNodos(anteriores => [...anteriores, creado]);
         setApiKeyNuevoNodo(creado.api_key || "");
-        setExitoNodo(`Nodo ${creado.identificador} creado correctamente (ID ${creado.id}).`);
+        mostrarExito("Nodo creado", `${creado.identificador} se creó correctamente (ID ${creado.id}). Copia la API key que aparece en la sección de nodos; no volverá a mostrarse.`);
       }
       setIdentificadorNodo("");
       setAccionNodo("");
     } catch (error) {
-      setErrorNodo(error.message || "No se pudo guardar el nodo.");
+      mostrarError(tituloError, error.message || "No se pudo guardar el nodo.");
     } finally { setGuardandoNodo(false); }
   };
   const handleLogout = () => onLogout?.();
@@ -594,7 +592,7 @@ export default function ConfigGeneral({ usuario, onLogout }) {
                       <div><div style={styles.itemTitle}>Agregar nuevo nodo</div>
                       <div style={styles.itemDesc}>Registro real en MySQL; el backend genera una clave API que debes entregar al dispositivo.</div></div>
                     </div>
-                    <button type="button" disabled={!parcelaId || guardandoNodo} style={{ ...styles.saveBtn, opacity: parcelaId ? 1 : 0.5 }} onClick={() => { setAccionNodo(accionNodo === "crear" ? "" : "crear"); setErrorNodo(""); setExitoNodo(""); setApiKeyNuevoNodo(""); setIdentificadorNodo(""); }}>+ Nuevo nodo</button>
+                    <button type="button" disabled={!parcelaId || guardandoNodo} style={{ ...styles.saveBtn, opacity: parcelaId ? 1 : 0.5 }} onClick={() => { setAccionNodo(accionNodo === "crear" ? "" : "crear"); setApiKeyNuevoNodo(""); setIdentificadorNodo(""); }}>+ Nuevo nodo</button>
                   </div>
                   <div style={styles.row}>
                     <div style={{ display: "flex", alignItems: "center", gap: 15 }}>
@@ -602,7 +600,7 @@ export default function ConfigGeneral({ usuario, onLogout }) {
                       <div><div style={styles.itemTitle}>Renombrar nodo</div>
                       <div style={styles.itemDesc}>Actualiza el identificador en MySQL; requiere coordinarlo con firmware e histórico.</div></div>
                     </div>
-                    <button type="button" disabled={!nodoId || guardandoNodo} style={{ ...styles.saveBtn, opacity: nodoId ? 1 : 0.5 }} onClick={() => { setAccionNodo(accionNodo === "editar" ? "" : "editar"); setErrorNodo(""); setExitoNodo(""); setApiKeyNuevoNodo(""); setIdentificadorNodo(nodosSuelo.find(n => String(n.id) === String(nodoId))?.identificador || ""); }}>Renombrar</button>
+                    <button type="button" disabled={!nodoId || guardandoNodo} style={{ ...styles.saveBtn, opacity: nodoId ? 1 : 0.5 }} onClick={() => { setAccionNodo(accionNodo === "editar" ? "" : "editar"); setApiKeyNuevoNodo(""); setIdentificadorNodo(nodosSuelo.find(n => String(n.id) === String(nodoId))?.identificador || ""); }}>Renombrar</button>
                   </div>
                   {accionNodo && (
                     <div style={{ background: "#f5faef", padding: 15, borderRadius: 9, border: "1px solid #d5e4c9", display: "grid", gap: 10 }}>
@@ -619,13 +617,11 @@ export default function ConfigGeneral({ usuario, onLogout }) {
                       </div>
                     </div>
                   )}
-                  {errorNodo && <p role="alert" style={{ color: "#b42318" }}>{errorNodo}</p>}
-                  {exitoNodo && <p role="status" style={{ color: "#2F5413" }}>{exitoNodo}</p>}
                   {apiKeyNuevoNodo && (
                     <div style={{ padding: 12, border: "2px solid #bcd5aa", borderRadius: 8, overflowWrap: "anywhere" }}>
                       <strong>API key del nuevo nodo — copiar ahora, no volverá a mostrarse:</strong>
                       <p><code>{apiKeyNuevoNodo}</code></p>
-                      <button type="button" onClick={() => navigator.clipboard.writeText(apiKeyNuevoNodo)} style={styles.saveBtn}>Copiar API key</button>
+                      <button type="button" onClick={() => navigator.clipboard.writeText(apiKeyNuevoNodo).then(() => mostrarExito("API key copiada", "La clave está en el portapapeles.")).catch(() => mostrarError("No se pudo copiar", "Copia manualmente la clave."))} style={styles.saveBtn}>Copiar API key</button>
                       <p style={{ fontSize: 12 }}>Guárdala de forma segura y configúrala en el ESP32 correspondiente; no se activa hardware automáticamente.</p>
                     </div>
                   )}
@@ -653,17 +649,6 @@ export default function ConfigGeneral({ usuario, onLogout }) {
               </div>
             )}
 
-            {/* Feedback justo al lado del botón, siempre visible tras el clic. */}
-            {errorConfig && (
-              <p role="alert" style={{ color: "#b42318", fontWeight: 600, marginTop: 24, textAlign: "right" }}>
-                {errorConfig}
-              </p>
-            )}
-            {mensaje && (
-              <p role="status" aria-live="polite" style={{ color: "#2F5413", fontWeight: 600, marginTop: 24, textAlign: "right" }}>
-                {mensaje}
-              </p>
-            )}
             <div style={styles.actionButtons}>
               <button type="button" style={styles.cancelBtn} onClick={handleCancelar}>Volver</button>
               <button

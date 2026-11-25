@@ -5,8 +5,8 @@ import Notificaciones from "../components/AvisosPanel";
 import MapaParcela from "../components/MapaParcela";
 import TipoRiegoSelector from "../components/TipoRiegoSelector";
 import TemperaturaUbicacion from "../components/TemperaturaUbicacion";
-import Swal from "sweetalert2";
 import { finDiaApp, hoyApp, inicioDiaApp, sumarDias, validarRangoFechas } from "../utils/fechas";
+import { mostrarError, mostrarExito } from "../utils/dialogos";
 const API_URL = (
   import.meta.env.VITE_API_URL || "http://localhost:5000/api"
 ).replace(/\/api\/?$/, "");
@@ -284,8 +284,6 @@ export default function Dashboard({ usuario, onLogout }) {
   );
   const [fechaHastaDashboard, setFechaHastaDashboard] = useState(() => hoyApp());
   const [nodoPendiente, setNodoPendiente] = useState(null);
-  const [errorCambioNodo, setErrorCambioNodo] = useState("");
-  const [mensajeCambioNodo, setMensajeCambioNodo] = useState("");
   useEffect(() => {
     const controlador = new AbortController();
     const cargarNodosRegistrados = async () => {
@@ -574,13 +572,11 @@ const idsNodosActivos = new Set(
     if (nodoPendiente !== null || !["activo", "inactivo"].includes(nodo.estado)) return;
     const token = localStorage.getItem("access_token") || localStorage.getItem("token");
     if (!token) {
-      setErrorCambioNodo("La sesión ha caducado. Inicia sesión nuevamente.");
+      mostrarError("No se pudo actualizar el nodo", "La sesión ha caducado. Inicia sesión nuevamente.");
       return;
     }
     const estadoNuevo = nodo.estado === "activo" ? "inactivo" : "activo";
     setNodoPendiente(nodo.id);
-    setErrorCambioNodo("");
-    setMensajeCambioNodo("");
     try {
       const respuesta = await fetch(`${API_URL}/api/nodos/${nodo.id}`, {
         method: "PUT",
@@ -600,9 +596,9 @@ const idsNodosActivos = new Set(
       setNodosRegistrados((previos) => previos.map((actual) =>
         Number(actual.id) === Number(nodo.id) ? { ...actual, estado: estadoNuevo } : actual
       ));
-      setMensajeCambioNodo(`${nodo.identificador || `Nodo ${nodo.id}`}: ${estadoNuevo}. Guardado en MySQL.`);
+      mostrarExito("Estado del nodo actualizado", `${nodo.identificador || `Nodo ${nodo.id}`} ahora está ${estadoNuevo}. No controla las bombas ni las válvulas.`);
     } catch (error) {
-      setErrorCambioNodo(`No se pudo actualizar el nodo: ${error.message}`);
+      mostrarError("No se pudo actualizar el nodo", error);
     } finally {
       setNodoPendiente(null);
     }
@@ -832,16 +828,6 @@ const idsNodosActivos = new Set(
         {errorDatos && (
           <div role="alert" style={{ padding: "8px 18px", color: "#7a4a0c", background: "#fff6e8", fontSize: 13 }}>
             No se pudieron cargar las lecturas actuales: {errorDatos}
-          </div>
-        )}
-        {errorCambioNodo && (
-          <div role="alert" style={{ padding: "8px 18px", color: "#9b1c1c", background: "#fff1f0", fontSize: 13 }}>
-            {errorCambioNodo}
-          </div>
-        )}
-        {mensajeCambioNodo && !errorCambioNodo && (
-          <div role="status" style={{ padding: "6px 18px", color: "#2F5413", background: "#f1f7eb", fontSize: 12 }}>
-            {mensajeCambioNodo} (No controla las bombas ni las válvulas.)
           </div>
         )}
         <main style={styles.main}>

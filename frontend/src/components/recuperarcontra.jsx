@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import logoImg from "../assets/agroia-logo.png";
+import { mostrarError, mostrarExito } from "../utils/dialogos";
 
 const API_URL = (
   import.meta.env.VITE_API_URL || "http://localhost:5000/api"
@@ -8,14 +9,10 @@ const API_URL = (
 export default function RecuperarContra({ isOpen, onClose }) {
   const [correo, setCorreo] = useState("");
   const [cargando, setCargando] = useState(false);
-  const [mensaje, setMensaje] = useState("");
-  const [error, setError] = useState("");
 
   useEffect(() => {
     if (isOpen) {
       setCorreo("");
-      setMensaje("");
-      setError("");
       setCargando(false);
     }
   }, [isOpen]);
@@ -25,8 +22,6 @@ export default function RecuperarContra({ isOpen, onClose }) {
   const enviar = async (evento) => {
     evento.preventDefault();
     if (cargando) return;
-    setError("");
-    setMensaje("");
     setCargando(true);
     try {
       const respuesta = await fetch(`${API_URL}/api/auth/recuperar-password`, {
@@ -38,9 +33,10 @@ export default function RecuperarContra({ isOpen, onClose }) {
       if (!respuesta.ok) {
         throw new Error(datos.error || "No se pudo procesar la solicitud.");
       }
-      setMensaje(datos.mensaje || "Si la cuenta existe, recibirás un correo.");
+      onClose();
+      mostrarExito("Solicitud enviada", datos.mensaje || "Si la cuenta existe, recibirás un correo.");
     } catch (err) {
-      setError(err.message || "Error de conexión con el servidor.");
+      mostrarError("No se pudo enviar la solicitud", err.message || "Error de conexión con el servidor.");
     } finally {
       setCargando(false);
     }
@@ -54,31 +50,26 @@ export default function RecuperarContra({ isOpen, onClose }) {
         <p className="modal-text">
           Introduce el correo registrado. Si existe una cuenta activa, te enviaremos un enlace válido durante 20 minutos.
         </p>
-        {mensaje ? (
-          <p className="modal-text" role="status">{mensaje}</p>
-        ) : (
-          <form onSubmit={enviar} style={{ width: "100%", display: "flex", flexDirection: "column", gap: 12 }}>
-            <label htmlFor="correo-recuperacion" style={{ textAlign: "left", fontSize: 13 }}>
-              Correo electrónico
-            </label>
-            <input
-              id="correo-recuperacion"
-              type="email"
-              required
-              maxLength={150}
-              autoComplete="email"
-              value={correo}
-              onChange={(e) => setCorreo(e.target.value)}
-              placeholder="usuario@correo.com"
-              className="login-input"
-              style={{ width: "100%", boxSizing: "border-box" }}
-            />
-            {error && <p role="alert" style={{ color: "#b42318", margin: 0 }}>{error}</p>}
-            <button type="submit" className="modal-btn-enviar" disabled={cargando}>
-              {cargando ? "Enviando..." : "Enviar enlace de recuperación"}
-            </button>
-          </form>
-        )}
+        <form onSubmit={enviar} style={{ width: "100%", display: "flex", flexDirection: "column", gap: 12 }}>
+          <label htmlFor="correo-recuperacion" style={{ textAlign: "left", fontSize: 13 }}>
+            Correo electrónico
+          </label>
+          <input
+            id="correo-recuperacion"
+            type="email"
+            required
+            maxLength={150}
+            autoComplete="email"
+            value={correo}
+            onChange={(e) => setCorreo(e.target.value)}
+            placeholder="usuario@correo.com"
+            className="login-input"
+            style={{ width: "100%", boxSizing: "border-box" }}
+          />
+          <button type="submit" className="modal-btn-enviar" disabled={cargando}>
+            {cargando ? "Enviando..." : "Enviar enlace de recuperación"}
+          </button>
+        </form>
         <button
           type="button"
           className="modal-btn-enviar"

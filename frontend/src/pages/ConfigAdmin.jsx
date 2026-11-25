@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useDesplazarAlAbrir } from "../utils/formularios";
+import { mostrarError, mostrarExito } from "../utils/dialogos";
 import { useNavigate, Link, useLocation } from "react-router-dom";
 import logoAgroIA from "../assets/agroia-logo.png";
 import Notificaciones from "../components/AvisosPanel";
@@ -40,29 +41,24 @@ export default function ConfigAdmin({ onLogout }) {
   const [cargandoUsuarios, setCargandoUsuarios] = useState(true);
   const [altaAbierta, setAltaAbierta] = useState(false);
   const [nuevoUsuario, setNuevoUsuario] = useState({ nombre: "", correo: "", rol: "agricultor", password: "" });
-  const [errorAlta, setErrorAlta] = useState("");
-  const [exitoAlta, setExitoAlta] = useState("");
   const [creandoUsuario, setCreandoUsuario] = useState(false);
   const [editandoUsuario, setEditandoUsuario] = useState(null);
   const [edicionUsuario, setEdicionUsuario] = useState({ nombre:'', correo:'', rol:'agricultor', activo:true });
   const [guardandoUsuario, setGuardandoUsuario] = useState(false);
-  const [errorEdicion, setErrorEdicion] = useState('');
-  const [okEdicion, setOkEdicion] = useState('');
   // Solo un formulario de usuarios abierto a la vez; cada apertura desplaza hasta él.
   const [aperturaForm, setAperturaForm] = useState(0);
   const refEdicion = useDesplazarAlAbrir(editandoUsuario !== null ? aperturaForm : null);
   const refAlta = useDesplazarAlAbrir(altaAbierta ? aperturaForm : null);
   const abrirAlta = () => {
     const abrir = !altaAbierta;
-    setEditandoUsuario(null); setErrorEdicion(''); setOkEdicion('');
-    setAltaAbierta(abrir); setErrorAlta(""); setExitoAlta("");
+    setEditandoUsuario(null);
+    setAltaAbierta(abrir);
     if (abrir) setAperturaForm(n => n + 1);
   };
   const abrirEdicion = (user) => {
-    setAltaAbierta(false); setErrorAlta(""); setExitoAlta("");
+    setAltaAbierta(false);
     setEditandoUsuario(user.id);
     setEdicionUsuario({ nombre:user.nombre, correo:user.correo, rol:user.rol, activo:Boolean(user.activo) });
-    setErrorEdicion(''); setOkEdicion('');
     setAperturaForm(n => n + 1);
   };
 
@@ -77,8 +73,6 @@ export default function ConfigAdmin({ onLogout }) {
   const [descargando, setDescargando] = useState("");
   // Comprobación previa: "verificando" | "con_datos" | "sin_datos" | "desconocido".
   const [datosReporte, setDatosReporte] = useState("verificando");
-  const [errorReporte, setErrorReporte] = useState("");
-  const [mensajeReporte, setMensajeReporte] = useState("");
 
   const nombreSesion = localStorage.getItem("nombre") || "Usuario";
   const rolSesion = localStorage.getItem("rol") || "Sesión activa";
@@ -275,11 +269,10 @@ export default function ConfigAdmin({ onLogout }) {
 
   const descargarReporte = async (formato) => {
     if (descargando) return;
-    setErrorReporte("");
-    setMensajeReporte("");
+    const tituloError = "No se pudo descargar el reporte";
 
     if (!parcelaReporte) {
-      setErrorReporte("Selecciona una parcela para descargar el reporte.");
+      mostrarError(tituloError, "Selecciona una parcela para descargar el reporte.");
       return;
     }
 
@@ -287,14 +280,14 @@ export default function ConfigAdmin({ onLogout }) {
     try {
       rango = obtenerRangoReporte(desde, hasta);
     } catch (e) {
-      setErrorReporte(e.message);
+      mostrarError(tituloError, e);
       return;
     }
 
     const token =
       localStorage.getItem("access_token") || localStorage.getItem("token");
     if (!token) {
-      setErrorReporte("Tu sesión ha expirado. Inicia sesión nuevamente.");
+      mostrarError(tituloError, "Tu sesión ha expirado. Inicia sesión nuevamente.");
       return;
     }
 
@@ -335,11 +328,12 @@ export default function ConfigAdmin({ onLogout }) {
         // Tiempo suficiente para que el navegador inicie la descarga.
         setTimeout(() => URL.revokeObjectURL(urlTemporal), 1500);
       }
-      setMensajeReporte(
+      mostrarExito(
+        "Reporte listo",
         `Se preparó la descarga del reporte ${formato.toUpperCase()}.`
       );
     } catch (e) {
-      setErrorReporte(e.message || "No se pudo descargar el reporte.");
+      mostrarError(tituloError, e.message || "No se pudo descargar el reporte.");
     } finally {
       setDescargando("");
     }
@@ -361,7 +355,6 @@ export default function ConfigAdmin({ onLogout }) {
     }
 
     setCerrandoSesion(true);
-    setError("");
 
     try {
       const respuesta = await fetch(`${API_URL}/api/auth/logout`, {
@@ -377,7 +370,8 @@ export default function ConfigAdmin({ onLogout }) {
 
       if (onLogout) onLogout(); else limpiarSesion();
     } catch (err) {
-      setError(
+      mostrarError(
+        "No se pudo cerrar sesión",
         "No fue posible cerrar sesión en el servidor. Verifica la conexión."
       );
       setCerrandoSesion(false);
@@ -386,11 +380,10 @@ export default function ConfigAdmin({ onLogout }) {
 
   const crearUsuario = async (evento) => {
     evento.preventDefault();
-    setErrorAlta(""); setExitoAlta("");
     const nombre = nuevoUsuario.nombre.trim();
     const correo = nuevoUsuario.correo.trim().toLowerCase();
     const errorDatos = validarNombrePersona(nombre) || validarCorreo(correo) || validarPassword(nuevoUsuario.password);
-    if (errorDatos) { setErrorAlta(errorDatos); return; }
+    if (errorDatos) { mostrarError("No se pudo crear la cuenta", errorDatos); return; }
     setCreandoUsuario(true);
     try {
       const token = localStorage.getItem("access_token") || localStorage.getItem("token");
@@ -404,15 +397,15 @@ export default function ConfigAdmin({ onLogout }) {
       setUsuarios(actual => [...actual, creado]);
       setNuevoUsuario({ nombre: "", correo: "", rol: "agricultor", password: "" });
       setAltaAbierta(false);
-      setExitoAlta(`Usuario ${creado.nombre} registrado correctamente.`);
-    } catch (error) { setErrorAlta(error.message); }
+      mostrarExito("Usuario creado", `${creado.nombre} se registró correctamente.`);
+    } catch (error) { mostrarError("No se pudo crear la cuenta", error); }
     finally { setCreandoUsuario(false); }
   };
 
   const guardarEdicionUsuario = async (e) => {
     e.preventDefault();
     if (guardandoUsuario || !editandoUsuario) return;
-    setErrorEdicion('');setOkEdicion('');setGuardandoUsuario(true);
+    setGuardandoUsuario(true);
     try {
       const datos = { ...edicionUsuario, nombre:edicionUsuario.nombre.trim(), correo:edicionUsuario.correo.trim().toLowerCase() };
       const original = usuarios.find(u => u.id === editandoUsuario);
@@ -425,8 +418,9 @@ export default function ConfigAdmin({ onLogout }) {
       const r = await res.json().catch(()=>({}));
       if(!res.ok) throw new Error(r.error || r.msg || `No se pudo modificar (HTTP ${res.status})`);
       setUsuarios(actual=>actual.map(u=>u.id===r.id?r:u));
-      setEditandoUsuario(null);setOkEdicion('Usuario actualizado en MySQL. Los cambios de rol pueden requerir iniciar sesión de nuevo.');
-    } catch(err) {setErrorEdicion(err.message);} finally {setGuardandoUsuario(false);}
+      setEditandoUsuario(null);
+      mostrarExito('Usuario actualizado', 'Los cambios se guardaron. Los cambios de rol pueden requerir iniciar sesión de nuevo.');
+    } catch(err) {mostrarError('No se pudo actualizar el usuario', err);} finally {setGuardandoUsuario(false);}
   };
   // ============================================
   // INTERFAZ DE ADMINISTRACIÓN
@@ -704,8 +698,6 @@ export default function ConfigAdmin({ onLogout }) {
                 <div style={{display:'flex',gap:10}}><button style={styles.logoutBtn} disabled={guardandoUsuario} type="submit">{guardandoUsuario?'Guardando...':'Guardar cambios'}</button><button type="button" style={styles.logoutBtn} onClick={()=>setEditandoUsuario(null)}>Cancelar</button></div>
               </form>
             )}
-            {errorEdicion && <p role="alert" style={{color:'#b42318'}}>{errorEdicion}</p>}
-            {okEdicion && <p role="status" style={{color:'#2F5413'}}>{okEdicion}</p>}
             {altaAbierta && (
               <form ref={refAlta} onSubmit={crearUsuario} style={{ scrollMarginTop: 16, background: "#f3f8ef", border: "1px solid #c9dfba", borderRadius: 10, padding: 16, marginTop: 15, display: "grid", gap: 12 }}>
                 <strong>Registrar nuevo usuario</strong>
@@ -717,8 +709,6 @@ export default function ConfigAdmin({ onLogout }) {
                 <div style={{ display: "flex", gap: 10 }}><button type="submit" disabled={creandoUsuario} style={styles.logoutBtn}>{creandoUsuario ? "Creando..." : "Crear cuenta"}</button><button type="button" onClick={() => setAltaAbierta(false)} style={styles.logoutBtn}>Cancelar</button></div>
               </form>
             )}
-            {errorAlta && <p role="alert" style={{ color: "#b42318" }}>{errorAlta}</p>}
-            {exitoAlta && <p role="status" style={{ color: "#2F5413" }}>{exitoAlta}</p>}
             <p style={styles.nota}>Los cambios de usuario se guardan en MySQL. Desactivar una cuenta evita futuros accesos según la verificación de autenticación del backend; las sesiones ya emitidas requieren control adicional de revocación.</p>
           </div>
 
@@ -739,8 +729,6 @@ export default function ConfigAdmin({ onLogout }) {
                   disabled={cargandoParcelas || Boolean(descargando)}
                   onChange={(e) => {
                     setParcelaReporte(e.target.value);
-                    setErrorReporte("");
-                    setMensajeReporte("");
                   }}
                 >
                   {!parcelasReporte.length && (
@@ -764,8 +752,6 @@ export default function ConfigAdmin({ onLogout }) {
                   disabled={Boolean(descargando)}
                   onChange={(e) => {
                     setDesde(e.target.value);
-                    setErrorReporte("");
-                    setMensajeReporte("");
                   }}
                 />
               </label>
@@ -781,8 +767,6 @@ export default function ConfigAdmin({ onLogout }) {
                   disabled={Boolean(descargando)}
                   onChange={(e) => {
                     setHasta(e.target.value);
-                    setErrorReporte("");
-                    setMensajeReporte("");
                   }}
                 />
               </label>
@@ -821,17 +805,11 @@ export default function ConfigAdmin({ onLogout }) {
             {parcelaReporte && datosReporte === "verificando" && (
               <p role="status" style={styles.nota}>Comprobando si hay datos en el periodo...</p>
             )}
-            {sinDatosReporte && !errorReporte && (
+            {sinDatosReporte && (
               <p role="alert" style={styles.errorBox}>
                 No hay información disponible para la parcela y el periodo seleccionados.
                 Elige otro periodo o parcela para descargar el reporte.
               </p>
-            )}
-            {errorReporte && (
-              <p role="alert" style={styles.errorBox}>{errorReporte}</p>
-            )}
-            {mensajeReporte && (
-              <p role="status" style={styles.exitoReporte}>{mensajeReporte}</p>
             )}
 
             <p style={styles.nota}>
@@ -1188,12 +1166,6 @@ const styles = {
     fontSize: 14,
   },
 
-  exitoReporte: {
-    marginTop: 15,
-    color: "#2F5413",
-    fontWeight: "bold",
-    fontSize: 13,
-  },
 
   btnDeshabilitado: {
     backgroundColor: "#f1f1f1",
