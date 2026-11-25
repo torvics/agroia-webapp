@@ -16,3 +16,5 @@ dist/
 # Reportes generados por AgroIA
 /reporte_parcela_*.csv
 /reporte_parcela_*.pdf
+# Credenciales del firmware ESP32 (usar simulador/secrets.example.h como plantilla)
+simulador/secrets.h
