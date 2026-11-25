@@ -1,5 +1,7 @@
 
-from flask import Flask
+from flask import Flask, jsonify, request
+from sqlalchemy.exc import SQLAlchemyError
+from werkzeug.exceptions import HTTPException
 from flask_cors import CORS
 
 from .extensions import db, jwt, migrate
@@ -189,5 +191,27 @@ def create_app():
     @app.route("/api/health")
     def health():
         return {"status": "ok"}, 200
+
+    # ======================================
+    # ERRORES NO CONTROLADOS EN LA API
+    # ======================================
+    # Se registra la traza completa en el servidor y el cliente recibe JSON
+    # con un mensaje claro (antes recibía HTML y solo veía «Error HTTP 500»).
+    @app.errorhandler(Exception)
+    def error_no_controlado(error):
+        if isinstance(error, HTTPException):
+            return error
+        app.logger.exception(
+            "Error no controlado en %s %s", request.method, request.path
+        )
+        if isinstance(error, SQLAlchemyError):
+            db.session.rollback()
+            return jsonify({
+                "error": (
+                    "No fue posible completar la operación en la base de "
+                    "datos. Intenta de nuevo en unos segundos."
+                )
+            }), 503
+        return jsonify({"error": "Error interno del servidor."}), 500
 
     return app

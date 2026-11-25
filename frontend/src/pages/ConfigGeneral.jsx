@@ -152,12 +152,13 @@ export default function ConfigGeneral({ usuario, onLogout }) {
           { signal: controlador.signal }
         );
         if (controlador.signal.aborted) return;
+        // configuracion es null si la parcela aún no tiene configuración.
         setFormulario(prepararFormulario(datos.configuracion));
-        setConfigExiste(true);
+        setConfigExiste(Boolean(datos.configuracion));
       } catch (error) {
         if (controlador.signal.aborted) return;
         if (error.status === 404) {
-          // El backend devuelve 404 cuando la parcela aún no tiene configuración.
+          // Compatibilidad con backends anteriores (404 = sin configuración).
           setConfigExiste(false);
           setFormulario({ ...FORMULARIO_VACIO });
         } else {

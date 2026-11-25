@@ -468,5 +468,59 @@ class IntegracionTest(unittest.TestCase):
             self.assertIn("text/csv", r.content_type)
 
 
+    # ---- Bloque 4: guardar Configuración (alertas) ----
+    def test_config_alertas_sin_config_y_persistencia(self):
+        parcela_id = self.crear_parcela()
+        ruta = f"/api/alertas/config?parcela_id={parcela_id}"
+        r = self.client.get(ruta, headers=self.headers(3))
+        self.assertEqual(r.status_code, 200)
+        self.assertIsNone(r.get_json()["configuracion"])
+        datos = {"parcela_id": parcela_id, "humedad_suelo_min": 30, "temperatura_min": 12.5,
+                 "correo_destino": None, "activa": True, "cooldown_minutos": 60}
+        r = self.client.post("/api/alertas/config", headers=self.headers(3), json=datos)
+        self.assertEqual(r.status_code, 201, r.get_json())
+        r = self.client.post("/api/alertas/config", headers=self.headers(3),
+                             json={**datos, "humedad_suelo_min": 40, "correo_destino": "usuario@dominio.com"})
+        self.assertEqual(r.status_code, 200, r.get_json())
+        guardada = self.client.get(ruta, headers=self.headers(3)).get_json()["configuracion"]
+        self.assertEqual((guardada["humedad_suelo_min"], guardada["temperatura_min"], guardada["correo_destino"]),
+                         (40.0, 12.5, "usuario@dominio.com"))
+        self.assertEqual(self.client.get(ruta, headers=self.headers(4)).status_code, 403)
+
+    def test_config_alertas_error_bd_responde_json_y_se_registra(self):
+        from sqlalchemy.exc import OperationalError
+        parcela_id = self.crear_parcela()
+        datos = {"parcela_id": parcela_id, "humedad_suelo_min": 30, "temperatura_min": 12,
+                 "activa": True, "cooldown_minutos": 60}
+        caida = OperationalError("SELECT 1", {}, Exception("Lost connection to MySQL server"))
+        self.app.config["PROPAGATE_EXCEPTIONS"] = False
+        # Fallo al confirmar: lo controla la ruta.
+        with patch("app.routes.alertas_routes.db.session.commit", side_effect=caida), \
+             self.assertLogs(self.app.logger, level="ERROR"):
+            r = self.client.post("/api/alertas/config", headers=self.headers(3), json=datos)
+        self.assertEqual(r.status_code, 503)
+        self.assertIn("No se pudo guardar", r.get_json()["error"])
+        # Fallo fuera de la ruta (p. ej. conexión caducada en la primera consulta):
+        # el manejador global responde JSON y registra la traza.
+        with patch("app.routes.alertas_routes.comprobar_acceso", side_effect=caida), \
+             self.assertLogs(self.app.logger, level="ERROR"):
+            r = self.client.post("/api/alertas/config", headers=self.headers(3), json=datos)
+        self.assertEqual(r.status_code, 503)
+        self.assertIn("base de datos", r.get_json()["error"])
+        with patch("app.routes.alertas_routes.comprobar_acceso", side_effect=RuntimeError("x")), \
+             self.assertLogs(self.app.logger, level="ERROR"):
+            r = self.client.post("/api/alertas/config", headers=self.headers(3), json=datos)
+        self.assertEqual(r.status_code, 500)
+        self.assertEqual(r.get_json()["error"], "Error interno del servidor.")
+        # Los 404 normales siguen siendo 404.
+        self.assertEqual(self.client.get("/api/no-existe", headers=self.headers(3)).status_code, 404)
+
+    def test_pool_verifica_conexiones(self):
+        from app.config import Config
+        self.assertTrue(Config.SQLALCHEMY_ENGINE_OPTIONS["pool_pre_ping"])
+        with self.app.app_context():
+            self.assertTrue(db.engine.pool._pre_ping)
+
+
 if __name__ == "__main__":
     unittest.main()

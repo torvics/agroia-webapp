@@ -2,7 +2,8 @@
 import math
 import re
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, current_app, jsonify, request
+from sqlalchemy.exc import SQLAlchemyError
 from flask_jwt_extended import (
     jwt_required,
     get_jwt_identity,
@@ -98,13 +99,12 @@ def obtener_config_alertas():
         parcela_id=parcela_id
     ).first()
 
-    if config is None:
-        return jsonify({
-            "error": "Esta parcela no tiene configuración de alertas"
-        }), 404
-
+    # Sin configuración no es un error: se responde null para que el
+    # navegador no registre un 404 en consola en cada carga.
     return jsonify({
-        "configuracion": serializar_config(config)
+        "configuracion": (
+            serializar_config(config) if config is not None else None
+        )
     }), 200
 
 
@@ -229,35 +229,43 @@ def guardar_config_alertas():
 
         valores_validados["correo_destino"] = correo
 
-    config = AlertaConfig.query.filter_by(
-        parcela_id=parcela_id
-    ).first()
-
-    nueva = config is None
-
-    if nueva:
-        config = AlertaConfig(parcela_id=parcela_id)
-
-    for campo, valor in valores_validados.items():
-        setattr(config, campo, valor)
-
     try:
+        config = AlertaConfig.query.filter_by(
+            parcela_id=parcela_id
+        ).first()
+
+        nueva = config is None
+
+        if nueva:
+            config = AlertaConfig(parcela_id=parcela_id)
+
+        for campo, valor in valores_validados.items():
+            setattr(config, campo, valor)
+
         db.session.add(config)
         db.session.commit()
+        respuesta = serializar_config(config)
 
-    except Exception:
+    except SQLAlchemyError:
         db.session.rollback()
+        current_app.logger.exception(
+            "Error guardando la configuración de alertas de la parcela %s",
+            parcela_id
+        )
 
         return jsonify({
-            "error": "No se pudo guardar la configuración"
-        }), 500
+            "error": (
+                "No se pudo guardar la configuración en la base de datos. "
+                "Intenta de nuevo."
+            )
+        }), 503
 
     return jsonify({
         "mensaje": (
             "Configuración creada"
             if nueva else "Configuración actualizada"
         ),
-        "configuracion": serializar_config(config)
+        "configuracion": respuesta
     }), 201 if nueva else 200
 
 # --- AgroIA: historial de alertas para notificaciones (solo lectura) ---

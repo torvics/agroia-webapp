@@ -12,6 +12,12 @@ class Config:
         "mysql+pymysql://agroia:agroia@mysql:3306/agroia_db"
     )
     SQLALCHEMY_TRACK_MODIFICATIONS = False
+    # Las BD en la nube cierran conexiones inactivas. Sin pre_ping, la primera
+    # consulta con una conexión caducada del pool falla (500 sin JSON).
+    SQLALCHEMY_ENGINE_OPTIONS = {
+        "pool_pre_ping": True,
+        "pool_recycle": 280,
+    }
 
     FRONTEND_ORIGIN = os.getenv("FRONTEND_ORIGIN", "http://localhost:5173")
     BACKEND_ORIGIN = os.getenv("BACKEND_ORIGIN", "http://localhost:5000")
