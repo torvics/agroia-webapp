@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import MapaParcela from '../components/MapaParcela';
 import logoAgroIA from '../assets/agroia-logo.png';
 import TipoRiegoSelector from '../components/TipoRiegoSelector';
 import { validarCoordenadas, validarNombreParcela } from '../utils/validaciones';
+import { useDesplazarAlAbrir } from '../utils/formularios';
 
 const API = (import.meta.env.VITE_API_URL || 'http://localhost:5000/api').replace(/\/api\/?$/, '') + '/api';
 const normalizar = respuesta => Array.isArray(respuesta) ? respuesta : respuesta.parcelas ?? [];
@@ -31,6 +32,8 @@ export default function GestionParcelasNodos({ usuario, onLogout }) {
   const [ocupado,setOcupado] = useState(false);
   const [error,setError] = useState('');
   const [errorNodo,setErrorNodo] = useState('');
+  const [errorParcela,setErrorParcela] = useState('');
+  const [okParcela,setOkParcela] = useState('');
   const [errorRenombrado,setErrorRenombrado] = useState({});
   const [ok,setOk] = useState('');
   const [parcelaForm,setParcelaForm] = useState({...vacia});
@@ -41,6 +44,10 @@ export default function GestionParcelasNodos({ usuario, onLogout }) {
   const [mapa,setMapa] = useState(null);
   const [renombrando,setRenombrando] = useState(null);
   const [nuevoIdentificador,setNuevoIdentificador] = useState('');
+  const [parcelaOriginal,setParcelaOriginal] = useState(null);
+  const [aperturaEdicion,setAperturaEdicion] = useState(0);
+  const refFormParcela = useDesplazarAlAbrir(editandoParcela !== null ? aperturaEdicion : null);
+  const guardandoRef = useRef(false);
 
   const cargar = useCallback(async () => {
     setError('');setCargando(true);
@@ -54,21 +61,45 @@ export default function GestionParcelasNodos({ usuario, onLogout }) {
   },[]);
   useEffect(()=>{cargar();},[cargar]);
   const ejecutar = async (operacion,exito,setErrorDestino=setError) => {
-    if(ocupado)return;
-    setOcupado(true);setErrorDestino('');setOk('');
+    // La ref evita dobles envíos aunque se pulse dos veces antes de que React vuelva a pintar.
+    if(ocupado||guardandoRef.current)return;
+    guardandoRef.current=true;setOcupado(true);setErrorDestino('');setOk('');
     try {await operacion();setOk(exito);await cargar();}
     catch(e){setErrorDestino(e.message);}
-    finally {setOcupado(false);}
+    finally {guardandoRef.current=false;setOcupado(false);}
+  };
+  const cancelarEdicion = () => {setErrorParcela('');setEditandoParcela(null);setParcelaOriginal(null);setParcelaForm({...vacia});};
+  const abrirEdicion = p => {
+    setRenombrando(null);setErrorParcela('');setOkParcela('');setOk('');
+    setEditandoParcela(p.id);
+    const datos = {nombre:p.nombre||'',ubicacion:p.ubicacion||''};
+    setParcelaOriginal(datos);setParcelaForm(datos);
+    setAperturaEdicion(n=>n+1);
+  };
+  const abrirRenombrado = n => {
+    if(editandoParcela!==null) cancelarEdicion();
+    setRenombrando(n.id);setNuevoIdentificador(n.identificador);setErrorRenombrado(actual => ({...actual,[n.id]:''}));
   };
   const nuevaParcela = async e => {
     e.preventDefault();
     const errorDatos = validarNombreParcela(parcelaForm.nombre) || validarCoordenadas(parcelaForm.ubicacion);
-    if(errorDatos)return setError(errorDatos);
+    setOkParcela('');
+    if(errorDatos)return setErrorParcela(errorDatos);
     const editar = editandoParcela !== null;
+    const datos = {nombre:parcelaForm.nombre.trim(),ubicacion:parcelaForm.ubicacion.trim()};
+    if(editar){
+      // Guardado explícito: se muestra qué cambia y, si se cancela, no se envía nada.
+      const original = parcelaOriginal || vacia;
+      const cambios = [['Nombre','nombre'],['Ubicación','ubicacion']]
+        .filter(([,k])=>datos[k]!==String(original[k]??'').trim())
+        .map(([etiqueta,k])=>`• ${etiqueta}: «${String(original[k]??'').trim()||'(vacío)'}» → «${datos[k]||'(vacío)'}»`);
+      if(!cambios.length) return setErrorParcela('No hay cambios que guardar en la parcela.');
+      if(!window.confirm(`¿Guardar estos cambios en la parcela «${original.nombre}»?\n\n${cambios.join('\n')}`)) return setErrorParcela('Cambios no guardados. La parcela conserva sus datos originales.');
+    }
     await ejecutar(async()=> {
-      await api(editar ? `/parcelas/${editandoParcela}` : '/parcelas', {method:editar?'PUT':'POST',body:{nombre:parcelaForm.nombre.trim(),ubicacion:parcelaForm.ubicacion.trim()}});
-      setParcelaForm({...vacia});setEditandoParcela(null);
-    },editar?'Parcela actualizada.':'Parcela registrada en MySQL.');
+      await api(editar ? `/parcelas/${editandoParcela}` : '/parcelas', {method:editar?'PUT':'POST',body:datos});
+      cancelarEdicion();setOkParcela(editar?'Parcela actualizada.':'Parcela registrada en MySQL.');
+    },editar?'Parcela actualizada.':'Parcela registrada en MySQL.',setErrorParcela);
   };
   const eliminarParcela = p => {
     const asociados = nodos.filter(n=>Number(n.parcela_id)===Number(p.id));
@@ -77,9 +108,9 @@ export default function GestionParcelasNodos({ usuario, onLogout }) {
     ejecutar(()=>api(`/parcelas/${p.id}`,{method:'DELETE'}),'Parcela eliminada correctamente.');
   };
   const capturarGPS = () => {
-    setError('');
-    if(!navigator.geolocation || !window.isSecureContext) return setError('El GPS requiere HTTPS o localhost y permiso del navegador.');
-    navigator.geolocation.getCurrentPosition(p => setParcelaForm(f=>({...f,ubicacion:`${p.coords.latitude.toFixed(6)},${p.coords.longitude.toFixed(6)}`})),e=>setError(e.code===1?'Se denegó el permiso de ubicación.':'No se pudo detectar el GPS.'),{enableHighAccuracy:true,timeout:12000});
+    setErrorParcela('');
+    if(!navigator.geolocation || !window.isSecureContext) return setErrorParcela('El GPS requiere HTTPS o localhost y permiso del navegador.');
+    navigator.geolocation.getCurrentPosition(p => setParcelaForm(f=>({...f,ubicacion:`${p.coords.latitude.toFixed(6)},${p.coords.longitude.toFixed(6)}`})),e=>setErrorParcela(e.code===1?'Se denegó el permiso de ubicación.':'No se pudo detectar el GPS.'),{enableHighAccuracy:true,timeout:12000});
   };
   const registrarNodo = async e => {
     e.preventDefault(); setClaveCreada('');
@@ -117,19 +148,20 @@ export default function GestionParcelasNodos({ usuario, onLogout }) {
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',flexWrap:'wrap',gap:10}}><h2 style={{margin:'0 0 14px'}}>Mis parcelas {admin?'(todas las registradas)':''}</h2><button type="button" style={btnSec} onClick={cargar} disabled={ocupado}>↻ Actualizar</button></div>
         {parcelas.length===0&&!cargando&&<p>No hay parcelas registradas. Puedes crear la primera.</p>}
         <div style={{overflowX:'auto'}}><table style={{width:'100%',borderCollapse:'collapse',minWidth:650}}><thead><tr>{['Parcela','Ubicación','Nodos','Acciones'].map(t=><th key={t} style={th}>{t}</th>)}</tr></thead><tbody>
-          {parcelas.map(p=><tr key={p.id}><td style={td}><b>{p.nombre}</b><div style={{fontSize:12,color:'#666'}}>ID {p.id}{admin?` · Propietario ${p.usuario_id}`:''}</div></td><td style={td}>{p.ubicacion||'Sin ubicación'}</td><td style={td}>{nodos.filter(n=>Number(n.parcela_id)===Number(p.id)).length}</td><td style={td}><div style={{display:'flex',gap:6,flexWrap:'wrap'}}><button type="button" style={btnSec} onClick={()=>setMapa(p)}>Mapa</button><button type="button" style={btnSec} onClick={()=>{setEditandoParcela(p.id);setParcelaForm({nombre:p.nombre||'',ubicacion:p.ubicacion||''});}}>Editar</button><button type="button" style={btnDanger} onClick={()=>eliminarParcela(p)} disabled={ocupado}>Eliminar</button></div></td></tr>)}
+          {parcelas.map(p=><tr key={p.id}><td style={td}><b>{p.nombre}</b><div style={{fontSize:12,color:'#666'}}>ID {p.id}{admin?` · Propietario ${p.usuario_id}`:''}</div></td><td style={td}>{p.ubicacion||'Sin ubicación'}</td><td style={td}>{nodos.filter(n=>Number(n.parcela_id)===Number(p.id)).length}</td><td style={td}><div style={{display:'flex',gap:6,flexWrap:'wrap'}}><button type="button" style={btnSec} onClick={()=>setMapa(p)}>Mapa</button><button type="button" style={btnSec} onClick={()=>abrirEdicion(p)} disabled={ocupado}>Editar</button><button type="button" style={btnDanger} onClick={()=>eliminarParcela(p)} disabled={ocupado}>Eliminar</button></div></td></tr>)}
         </tbody></table></div>
-        <form onSubmit={nuevaParcela} style={{marginTop:22,padding:16,background:'#f2f7ed',borderRadius:8,display:'grid',gap:12}}><strong>{editandoParcela!==null?'Editar parcela':'Crear parcela nueva'}</strong>
+        <form ref={refFormParcela} onSubmit={nuevaParcela} style={{scrollMarginTop:16,marginTop:22,padding:16,background:'#f2f7ed',borderRadius:8,display:'grid',gap:12}}><strong>{editandoParcela!==null?`Editar parcela «${parcelaOriginal?.nombre??''}» (ID ${editandoParcela})`:'Crear parcela nueva'}</strong>
           <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(250px,1fr))',gap:12}}><label>Nombre<input required minLength={2} maxLength={100} style={campo} value={parcelaForm.nombre} onChange={e=>setParcelaForm(s=>({...s,nombre:e.target.value}))}/></label><label>Ubicación / coordenadas<input style={campo} maxLength={60} inputMode="decimal" placeholder="Ej. 29.086200, -110.951200" value={parcelaForm.ubicacion} onChange={e=>setParcelaForm(s=>({...s,ubicacion:e.target.value}))}/></label></div>
-          <div style={{display:'flex',gap:8,flexWrap:'wrap'}}><button type="button" style={btnSec} onClick={capturarGPS}>📍 Usar GPS actual en formulario</button><button type="submit" disabled={ocupado} style={btn}>{editandoParcela!==null?'Guardar cambios':'Crear parcela'}</button>{editandoParcela!==null&&<button type="button" style={btnSec} onClick={()=>{setEditandoParcela(null);setParcelaForm({...vacia});}}>Cancelar edición</button>}</div>
-          <small>GPS detecta la ubicación de ESTE dispositivo. Solo guarda las coordenadas cuando confirmas el formulario. Para registrar un terreno debes estar en la parcela.</small>
+          <div style={{display:'flex',gap:8,flexWrap:'wrap'}}><button type="button" style={btnSec} onClick={capturarGPS}>📍 Usar GPS actual en formulario</button><button type="submit" disabled={ocupado} style={{...btn,opacity:ocupado?.6:1}}>{ocupado?'Guardando...':editandoParcela!==null?'Guardar cambios…':'Crear parcela'}</button>{editandoParcela!==null&&<button type="button" style={btnSec} disabled={ocupado} onClick={cancelarEdicion}>Cancelar edición</button>}</div>
+          {errorParcela&&<p role="alert" style={{margin:0,padding:10,background:'#ffeded',color:'#922a28',borderRadius:6}}>{errorParcela}</p>}{okParcela&&<p role="status" style={{margin:0,padding:10,background:'#e7f3df',color:'#2F5413',borderRadius:6}}>{okParcela}</p>}
+          <small>{editandoParcela!==null&&'Los cambios no se envían hasta pulsar «Guardar cambios…» y confirmarlos. '}GPS detecta la ubicación de ESTE dispositivo. Solo guarda las coordenadas cuando confirmas el formulario. Para registrar un terreno debes estar en la parcela.</small>
         </form>
       </section>
       <section style={caja}>
         <h2 style={{margin:'0 0 14px'}}>Gestión de nodos</h2><label>Parcela<select value={parcelaId} onChange={e=>{setParcelaId(e.target.value);setClaveCreada('');}} style={{...campo,maxWidth:360}}><option value="">Seleccionar parcela</option>{parcelas.map(p=><option key={p.id} value={p.id}>{p.nombre}</option>)}</select></label>
         {parcelaId&&<div style={{marginTop:12,marginBottom:15}}><TipoRiegoSelector parcelaId={parcelaId}/><small>El tipo de riego es una preferencia local de esta interfaz, no un comando al ESP32 ni una configuración compartida todavía.</small></div>}
         <div style={{overflowX:'auto'}}><table style={{width:'100%',borderCollapse:'collapse',minWidth:700}}><thead><tr>{['Identificador','Tipo','Estado','Acciones'].map(t=><th key={t} style={th}>{t}</th>)}</tr></thead><tbody>
-          {deParcela.map(n=><tr key={n.id}><td style={td}><b>{n.identificador}</b><div style={{fontSize:12,color:'#666'}}>ID {n.id}</div></td><td style={td}>{n.tipo==='estacion'?'Estación':'Sensor de suelo'}</td><td style={td}><select aria-label={`Estado de ${n.identificador}`} value={n.estado} disabled={ocupado} onChange={e=>actualizarEstado(n,e.target.value)} style={{...campo,margin:0,width:160}}><option value="activo">Activo</option><option value="inactivo">Inactivo</option><option value="mantenimiento">Mantenimiento</option></select></td><td style={td}><div style={{display:'flex',gap:8,flexWrap:'wrap'}}><button type="button" onClick={()=>{setRenombrando(n.id);setNuevoIdentificador(n.identificador);setErrorRenombrado(actual => ({...actual,[n.id]:''}));}} style={btnSec}>Renombrar</button><button type="button" disabled={ocupado||n.estado==='inactivo'} onClick={()=>bajaNodo(n)} style={btnDanger}>Dar de baja</button></div>{renombrando===n.id&&<div style={{display:'flex',gap:6,marginTop:8,flexWrap:'wrap'}}><input aria-label="Nuevo identificador" value={nuevoIdentificador} onChange={e=>setNuevoIdentificador(e.target.value)} style={{...campo,margin:0,maxWidth:190}}/><button type="button" style={btn} onClick={()=>renombrar(n)}>Guardar</button><button type="button" style={btnSec} onClick={()=>setRenombrando(null)}>Cancelar</button>{errorRenombrado[n.id]&&<small role="alert" style={{color:'#b42318',flexBasis:'100%'}}>{errorRenombrado[n.id]}</small>}</div>}</td></tr>)}
+          {deParcela.map(n=><tr key={n.id}><td style={td}><b>{n.identificador}</b><div style={{fontSize:12,color:'#666'}}>ID {n.id}</div></td><td style={td}>{n.tipo==='estacion'?'Estación':'Sensor de suelo'}</td><td style={td}><select aria-label={`Estado de ${n.identificador}`} value={n.estado} disabled={ocupado} onChange={e=>actualizarEstado(n,e.target.value)} style={{...campo,margin:0,width:160}}><option value="activo">Activo</option><option value="inactivo">Inactivo</option><option value="mantenimiento">Mantenimiento</option></select></td><td style={td}><div style={{display:'flex',gap:8,flexWrap:'wrap'}}><button type="button" onClick={()=>abrirRenombrado(n)} style={btnSec}>Renombrar</button><button type="button" disabled={ocupado||n.estado==='inactivo'} onClick={()=>bajaNodo(n)} style={btnDanger}>Dar de baja</button></div>{renombrando===n.id&&<div style={{display:'flex',gap:6,marginTop:8,flexWrap:'wrap'}}><input aria-label="Nuevo identificador" value={nuevoIdentificador} onChange={e=>setNuevoIdentificador(e.target.value)} style={{...campo,margin:0,maxWidth:190}}/><button type="button" style={btn} onClick={()=>renombrar(n)}>Guardar</button><button type="button" style={btnSec} onClick={()=>setRenombrando(null)}>Cancelar</button>{errorRenombrado[n.id]&&<small role="alert" style={{color:'#b42318',flexBasis:'100%'}}>{errorRenombrado[n.id]}</small>}</div>}</td></tr>)}
           {!deParcela.length&&<tr><td colSpan={4} style={td}>No hay nodos en esta parcela.</td></tr>}
         </tbody></table></div>
         <form onSubmit={registrarNodo} style={{background:'#f2f7ed',padding:16,borderRadius:8,marginTop:18,display:'grid',gap:12}}><strong>Registrar nuevo nodo</strong><div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(200px,1fr))',gap:12}}><label>Identificador<input value={nuevoNodo.identificador} onChange={e=>{setErrorNodo('');setNuevoNodo(s=>({...s,identificador:e.target.value}))}} style={campo} placeholder="sensor-parcela-05" required/></label><label>Tipo de dispositivo<select style={campo} value={nuevoNodo.tipo} onChange={e=>setNuevoNodo(s=>({...s,tipo:e.target.value}))}><option value="sensor_suelo">Sensor de suelo</option><option value="estacion">Estación meteorológica</option></select></label></div><button type="submit" style={{...btn,maxWidth:180}} disabled={!parcelaId||ocupado}>+ Registrar nodo</button>{errorNodo&&<small role="alert" style={{color:'#b42318'}}>{errorNodo}</small>}<small>Crear un nodo no conecta automáticamente el sensor físico. Deberás configurar su clave y el firmware.</small></form>

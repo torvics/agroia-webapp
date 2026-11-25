@@ -65,6 +65,8 @@ export default function Login({ onLogin }) {
               value={correo}
               onChange={(e) => setCorreo(e.target.value)}
               className="login-input"
+              autoComplete="email"
+              aria-label="Correo electrónico"
             />
             <input
               type="password"
@@ -83,9 +85,9 @@ export default function Login({ onLogin }) {
 
           <div className="recover-container">
             <span className="recover-text">¿Olvidó su contraseña? </span>
-            <span className="recover-link" onClick={() => setModalAbierto(true)}>
+            <button type="button" className="recover-link" onClick={() => setModalAbierto(true)}>
               Recupérala
-            </span>
+            </button>
           </div>
         </div>
       </div>

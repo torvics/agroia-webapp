@@ -142,6 +142,7 @@ export default function NodoDetalle({ usuario, onLogout }) {
 
   const [mapaAbierto, setMapaAbierto] = useState(false);
   const [parcelaMapa, setParcelaMapa] = useState(null);
+  const [cargandoMapa, setCargandoMapa] = useState(false);
   const [nodo, setNodo] = useState(null);
   const [nodos, setNodos] = useState([]);
   const [medicion, setMedicion] = useState(null);
@@ -264,6 +265,7 @@ export default function NodoDetalle({ usuario, onLogout }) {
 
   const abrirMapa = async () => {
     setMapaAbierto(true);
+    setCargandoMapa(true);
     try {
       const token = localStorage.getItem("access_token") || localStorage.getItem("token");
       const respuesta = await fetch(`${API_URL}/api/parcelas`, { headers: { Authorization: `Bearer ${token}` } });
@@ -272,6 +274,7 @@ export default function NodoDetalle({ usuario, onLogout }) {
       const lista = Array.isArray(resultado) ? resultado : resultado.parcelas ?? [];
       setParcelaMapa(lista.find(p => Number(p.id) === Number(nodo?.parcela_id)) || null);
     } catch { /* El mapa mostrará la parcela sin coordenadas si no es posible consultarlas. */ }
+    finally { setCargandoMapa(false); }
   };
 
   // Obtenemos la parcela objetivo en base a la lista de nodos y el ID de la URL
@@ -483,7 +486,7 @@ export default function NodoDetalle({ usuario, onLogout }) {
           )}
         </main>
       </div>
-      {mapaAbierto && <MapaParcela parcela={parcelaMapa || { id: nodo?.parcela_id, nombre: `Parcela ${nodo?.parcela_id}` }} onClose={() => setMapaAbierto(false)} />}
+      {mapaAbierto && <MapaParcela parcela={parcelaMapa || { id: nodo?.parcela_id, nombre: `Parcela ${nodo?.parcela_id}` }} cargando={cargandoMapa} onClose={() => setMapaAbierto(false)} />}
     </div>
   );
 }

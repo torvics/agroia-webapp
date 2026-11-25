@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useDesplazarAlAbrir } from "../utils/formularios";
 import { useNavigate, Link, useLocation } from "react-router-dom";
 import logoAgroIA from "../assets/agroia-logo.png";
 import Notificaciones from "../components/AvisosPanel";
@@ -47,6 +48,23 @@ export default function ConfigAdmin({ onLogout }) {
   const [guardandoUsuario, setGuardandoUsuario] = useState(false);
   const [errorEdicion, setErrorEdicion] = useState('');
   const [okEdicion, setOkEdicion] = useState('');
+  // Solo un formulario de usuarios abierto a la vez; cada apertura desplaza hasta él.
+  const [aperturaForm, setAperturaForm] = useState(0);
+  const refEdicion = useDesplazarAlAbrir(editandoUsuario !== null ? aperturaForm : null);
+  const refAlta = useDesplazarAlAbrir(altaAbierta ? aperturaForm : null);
+  const abrirAlta = () => {
+    const abrir = !altaAbierta;
+    setEditandoUsuario(null); setErrorEdicion(''); setOkEdicion('');
+    setAltaAbierta(abrir); setErrorAlta(""); setExitoAlta("");
+    if (abrir) setAperturaForm(n => n + 1);
+  };
+  const abrirEdicion = (user) => {
+    setAltaAbierta(false); setErrorAlta(""); setExitoAlta("");
+    setEditandoUsuario(user.id);
+    setEdicionUsuario({ nombre:user.nombre, correo:user.correo, rol:user.rol, activo:Boolean(user.activo) });
+    setErrorEdicion(''); setOkEdicion('');
+    setAperturaForm(n => n + 1);
+  };
 
   // Reportes: parcelas autorizadas, fechas y descarga autenticada.
   const [parcelasReporte, setParcelasReporte] = useState([]);
@@ -610,7 +628,7 @@ export default function ConfigAdmin({ onLogout }) {
                 </p>
               </div>
 
-              <button type="button" onClick={() => { setAltaAbierta(x => !x); setErrorAlta(""); setExitoAlta(""); }} style={{ ...styles.btnDeshabilitado, opacity: 1, cursor: "pointer", background: "#7A9D54", color: "#fff" }}>+ Nuevo usuario</button>
+              <button type="button" onClick={abrirAlta} aria-expanded={altaAbierta} style={{ ...styles.btnDeshabilitado, opacity: 1, cursor: "pointer", background: "#7A9D54", color: "#fff" }}>+ Nuevo usuario</button>
             </div>
 
             <div style={{ overflowX: "auto" }}>
@@ -668,7 +686,7 @@ export default function ConfigAdmin({ onLogout }) {
                               : "Activo"}
                           </span>
                         </td>
-                        <td style={styles.td}><button type="button" style={{...styles.btnDeshabilitado,opacity:1,cursor:'pointer',background:'#7A9D54',color:'#fff'}} onClick={()=>{setEditandoUsuario(user.id);setEdicionUsuario({nombre:user.nombre,correo:user.correo,rol:user.rol,activo:Boolean(user.activo)});setErrorEdicion('');setOkEdicion('');}}>Editar</button></td>
+                        <td style={styles.td}><button type="button" style={{...styles.btnDeshabilitado,opacity:1,cursor:'pointer',background:'#7A9D54',color:'#fff'}} onClick={()=>abrirEdicion(user)}>Editar</button></td>
                       </tr>
                     ))}
                 </tbody>
@@ -676,7 +694,7 @@ export default function ConfigAdmin({ onLogout }) {
             </div>
 
             {editandoUsuario !== null && (
-              <form onSubmit={guardarEdicionUsuario} style={{background:'#f3f8ef',border:'1px solid #c9dfba',padding:16,borderRadius:10,marginTop:15,display:'grid',gap:10}}>
+              <form ref={refEdicion} onSubmit={guardarEdicionUsuario} style={{scrollMarginTop:16,background:'#f3f8ef',border:'1px solid #c9dfba',padding:16,borderRadius:10,marginTop:15,display:'grid',gap:10}}>
                 <strong>Editar usuario ID {editandoUsuario}</strong>
                 <label>Nombre<input required minLength={2} maxLength={60} style={{display:'block',padding:9,width:'100%',boxSizing:'border-box'}} value={edicionUsuario.nombre} onChange={e=>setEdicionUsuario(p=>({...p,nombre:e.target.value}))}/></label>
                 <label>Correo<input required type="email" style={{display:'block',padding:9,width:'100%',boxSizing:'border-box'}} value={edicionUsuario.correo} onChange={e=>setEdicionUsuario(p=>({...p,correo:e.target.value}))}/></label>
@@ -689,7 +707,7 @@ export default function ConfigAdmin({ onLogout }) {
             {errorEdicion && <p role="alert" style={{color:'#b42318'}}>{errorEdicion}</p>}
             {okEdicion && <p role="status" style={{color:'#2F5413'}}>{okEdicion}</p>}
             {altaAbierta && (
-              <form onSubmit={crearUsuario} style={{ background: "#f3f8ef", border: "1px solid #c9dfba", borderRadius: 10, padding: 16, marginTop: 15, display: "grid", gap: 12 }}>
+              <form ref={refAlta} onSubmit={crearUsuario} style={{ scrollMarginTop: 16, background: "#f3f8ef", border: "1px solid #c9dfba", borderRadius: 10, padding: 16, marginTop: 15, display: "grid", gap: 12 }}>
                 <strong>Registrar nuevo usuario</strong>
                 <label>Nombre <input required minLength={2} maxLength={60} value={nuevoUsuario.nombre} onChange={e => setNuevoUsuario(p => ({ ...p, nombre: e.target.value }))} style={{ padding: 9, width: "100%", boxSizing: "border-box" }} /></label>
                 <label>Correo <input required type="email" maxLength={255} value={nuevoUsuario.correo} onChange={e => setNuevoUsuario(p => ({ ...p, correo: e.target.value }))} style={{ padding: 9, width: "100%", boxSizing: "border-box" }} /></label>
@@ -931,6 +949,8 @@ const styles = {
     display: "flex",
     justifyContent: "space-between",
     alignItems: "center",
+    flexWrap: "wrap",
+    gap: 10,
     padding: "8px 24px",
   },
 
