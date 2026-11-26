@@ -1,6 +1,9 @@
-//#include "secrets.h"
+// Credenciales y URL del backend: copia secrets.example.h como secrets.h
+// (misma carpeta) y rellénalo. secrets.h está en .gitignore y no se sube.
+#include "secrets.h"
 
 #include <WiFi.h>
+#include <WiFiClientSecure.h>
 #include <SPI.h>
 #include <LoRa.h>
 #include <WebServer.h>
@@ -10,17 +13,24 @@
 
 #define LED_BUILTIN 2
 
-char ssid[] = "Megacable_2.4G_4BAF";
-char pass[] = "EFEP7NPc";
+// ── Configuración que debe venir de secrets.h ────────────
+#if !defined(WIFI_SSID) || !defined(WIFI_PASS) || !defined(API_BASE_URL) || !defined(API_KEY)
+#error "Falta configuracion: copia secrets.example.h como secrets.h y define WIFI_SSID, WIFI_PASS, API_BASE_URL y API_KEY"
+#endif
 
-// ── Backend web (Flask) ──────────────────────────────────
-// IP de la PC donde corre Docker, en la MISMA red WiFi que el ESP32.
-// OJO: no uses localhost, desde el ESP32 "localhost" es el propio ESP32.
-#define API_BASE_URL  "http://192.168.1.17:5000/api"
-// api_key del nodo "estacion" (la imprime scripts/seed.py).
-// Si prefieres, muévela a secrets.h para no subirla a git.
-#define API_KEY       "d10e7f4332da926e764ce713f624ea0eb27bcf2f1da24754"
+// Prefijo de los identificadores de los nodos de suelo en la web
+// (p. ej. "nodo-" -> nodo-1..nodo-4). Vacío = "1".."4" (datos de scripts/seed.py).
+#ifndef PREFIJO_NODO
+#define PREFIJO_NODO ""
+#endif
+
+// Espera máxima de cada petición al backend. Render gratuito tarda en despertar.
+#ifndef HTTP_TIMEOUT_MS
+#define HTTP_TIMEOUT_MS 20000
+#endif
+
 #define INTERVALO_POLL_COMANDOS_MS 5000UL   // cada cuánto pregunta por comandos
+
 
 #define LORA_SS   5
 #define LORA_RST  14
@@ -350,7 +360,7 @@ void actualizar_historial_diario() {
 
 void guardar_decision_tinyml(int idx, int decision, float agua_suelo, float eto) {
   String json = "{";
-  json += "\"identificador\":\"" + String(idx + 1) + "\"";
+  json += "\"identificador\":\"" + ident_nodo(idx + 1) + "\"";
   json += ",\"decision\":"       + String(decision);
   json += ",\"agua_suelo\":"     + String(agua_suelo, 2);
   json += ",\"eto\":"            + String(eto, 2);
@@ -534,14 +544,45 @@ void leer_estacion() {
 // ── Backend web (API Flask) ──────────────────────────────
 // La Estación le habla SOLO al backend (con su api_key) y es el backend
 // quien escribe en InfluxDB. Ya no hay token de InfluxDB en el firmware.
+// ── Identificadores de nodo ──────────────────────────────
+// La web identifica cada nodo de suelo como PREFIJO_NODO + número (1..4).
+String ident_nodo(int numero) {
+  return String(PREFIJO_NODO) + String(numero);
+}
+
+// Inverso de ident_nodo(): "nodo-3" -> 3. Devuelve 0 si no es válido.
+int numero_desde_ident(const String &ident) {
+  String texto = ident;
+  String prefijo = PREFIJO_NODO;
+  if (prefijo.length() > 0) {
+    if (!texto.startsWith(prefijo)) return 0;
+    texto = texto.substring(prefijo.length());
+  }
+  return texto.toInt();
+}
+
+// Abre la petición con el cliente adecuado: HTTPS (Render) o HTTP (red local).
+// setInsecure(): la conexión va cifrada pero no se valida el certificado del
+// servidor. Suficiente para el piloto; lo ideal es setCACert() con la CA raíz.
+bool abrir_http(HTTPClient &http, WiFiClient &plano, WiFiClientSecure &seguro,
+                const String &url) {
+  if (url.startsWith("https://")) {
+    seguro.setInsecure();
+    return http.begin(seguro, url);
+  }
+  return http.begin(plano, url);
+}
+
 bool api_post(const String &ruta, String &json) {
   if (WiFi.status() != WL_CONNECTED) return false;
 
+  WiFiClient plano;
+  WiFiClientSecure seguro;
   HTTPClient http;
-  http.begin(String(API_BASE_URL) + ruta);
+  if (!abrir_http(http, plano, seguro, String(API_BASE_URL) + ruta)) return false;
   http.addHeader("Content-Type", "application/json");
   http.addHeader("X-API-KEY", API_KEY);
-  http.setTimeout(3000);
+  http.setTimeout(HTTP_TIMEOUT_MS);
 
   int  code = http.POST(json);
   bool ok   = (code == 200 || code == 201);
@@ -555,10 +596,12 @@ bool api_post(const String &ruta, String &json) {
 bool api_get(const String &ruta, String &respuesta) {
   if (WiFi.status() != WL_CONNECTED) return false;
 
+  WiFiClient plano;
+  WiFiClientSecure seguro;
   HTTPClient http;
-  http.begin(String(API_BASE_URL) + ruta);
+  if (!abrir_http(http, plano, seguro, String(API_BASE_URL) + ruta)) return false;
   http.addHeader("X-API-KEY", API_KEY);
-  http.setTimeout(3000);
+  http.setTimeout(HTTP_TIMEOUT_MS);
 
   int  code = http.GET();
   bool ok   = (code == 200);
@@ -572,7 +615,7 @@ bool api_get(const String &ruta, String &respuesta) {
 // Un nodo de suelo (llega por LoRa/HTTP del simulador) -> /sensores/datos
 bool guardar_sensores_suelo(struct_message &msg) {
   String json = "{\"nodos\":[{";
-  json += "\"identificador\":\"" + String(msg.nodo_id) + "\"";
+  json += "\"identificador\":\"" + ident_nodo(msg.nodo_id) + "\"";
   json += ",\"temp_suelo\":"     + String(msg.temp_suelo, 2);
   json += ",\"humedad_suelo\":"  + String(msg.humedad_suelo, 2);
   json += ",\"bateria_pct\":"    + String(msg.bateria_pct);
@@ -597,7 +640,7 @@ bool guardar_sensores_estacion() {
 void guardar_evento_riego(int idx, bool encendido,
                           float hum_fin = 0.0, float dur_min = 0.0) {
   String json = "{";
-  json += "\"identificador\":\"" + String(idx + 1) + "\"";
+  json += "\"identificador\":\"" + ident_nodo(idx + 1) + "\"";
   json += ",\"estado\":"               + String(encendido ? 1 : 0);
   json += ",\"duracion_min\":"         + String(dur_min, 2);
   json += ",\"litros\":"               + String(dur_min * CAUDAL_LPM, 2);
@@ -814,7 +857,7 @@ void procesar_mensaje(struct_message &mensaje) {
 //   tipo "riego" -> valor "inteligente"/"automatico"/"manual": modo global
 void aplicar_comando(const String &tipo, const String &ident, const String &valor) {
   if (tipo == "rele") {
-    int idx = ident.toInt() - 1;
+    int idx = numero_desde_ident(ident) - 1;
     if (idx < 0 || idx >= NUM_NODOS) return;
     bool v = (valor == "1" || valor == "true");
     relay_estado[idx]           = v;
@@ -970,7 +1013,7 @@ void setup() {
    */
 
   WiFi.mode(WIFI_STA);
-  WiFi.begin(ssid, pass);
+  WiFi.begin(WIFI_SSID, WIFI_PASS);
   Serial.printf("aqui conectandome a wifi");
 
   int intentos = 0;
