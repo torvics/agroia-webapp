@@ -1,0 +1,41 @@
+================================================== test session starts ==================================================
+platform win32 -- Python 3.9.1, pytest-8.4.2, pluggy-1.6.0 -- C:\Users\vitor\OneDrive\Documentos\GitHub\agroia-webapp\backend\venv\Scripts\python.exe
+metadata: {'Python': '3.9.1', 'Platform': 'Windows-10-10.0.26100-SP0', 'Packages': {'pytest': '8.4.2', 'pluggy': '1.6.0'}, 'Plugins': {'cov': '7.1.0', 'html': '4.2.0', 'metadata': '3.1.1'}}
+rootdir: C:\Users\vitor\OneDrive\Documentos\GitHub\agroia-webapp\backend
+configfile: pytest.ini
+plugins: cov-7.1.0, html-4.2.0, metadata-3.1.1
+collecting ... collected 29 items
+
+tests/test_03_parcelas_nodos.py::test_par01_agricultor_crea_una_parcela_y_la_ve_en_su_listado PASSED               [  3%]
+tests/test_03_parcelas_nodos.py::test_par02_parcela_sin_nombre_se_rechaza[cuerpo_vacio] PASSED                     [  6%]
+tests/test_03_parcelas_nodos.py::test_par02_parcela_sin_nombre_se_rechaza[nombre_vacio] PASSED                     [ 10%]
+tests/test_03_parcelas_nodos.py::test_par02_parcela_sin_nombre_se_rechaza[nombre_nulo] PASSED                      [ 13%]
+tests/test_03_parcelas_nodos.py::test_par02_parcela_sin_nombre_se_rechaza[solo_ubicacion] PASSED                   [ 17%]
+tests/test_03_parcelas_nodos.py::test_par03_cada_agricultor_ve_solo_sus_parcelas PASSED                            [ 20%]
+tests/test_03_parcelas_nodos.py::test_par04_no_se_puede_modificar_una_parcela_ajena PASSED                         [ 24%]
+tests/test_03_parcelas_nodos.py::test_par05_parcela_con_nodos_no_se_puede_eliminar[0_nodos_se_elimina] PASSED      [ 27%]
+tests/test_03_parcelas_nodos.py::test_par05_parcela_con_nodos_no_se_puede_eliminar[1_nodo_se_conserva] PASSED      [ 31%]
+tests/test_03_parcelas_nodos.py::test_par05_parcela_con_nodos_no_se_puede_eliminar[2_nodos_se_conserva] PASSED     [ 34%]
+tests/test_03_parcelas_nodos.py::test_par07_usuario_sin_registros_recibe_listas_vacias PASSED                      [ 37%]
+tests/test_03_parcelas_nodos.py::test_nod01_registrar_nodo_genera_api_key_unica PASSED                             [ 41%]
+tests/test_03_parcelas_nodos.py::test_nod02_alta_de_nodo_invalida_se_rechaza[sin_identificador] PASSED             [ 44%]
+tests/test_03_parcelas_nodos.py::test_nod02_alta_de_nodo_invalida_se_rechaza[sin_parcela] PASSED                   [ 48%]
+tests/test_03_parcelas_nodos.py::test_nod02_alta_de_nodo_invalida_se_rechaza[tipo_invalido] PASSED                 [ 51%]
+tests/test_03_parcelas_nodos.py::test_nod02_alta_de_nodo_invalida_se_rechaza[parcela_inexistente] PASSED           [ 55%]
+tests/test_03_parcelas_nodos.py::test_nod02_alta_de_nodo_invalida_se_rechaza[parcela_ajena] PASSED                 [ 58%]
+tests/test_03_parcelas_nodos.py::test_nod02_alta_de_nodo_invalida_se_rechaza[identificador_duplicado] PASSED       [ 62%]
+tests/test_03_parcelas_nodos.py::test_nod03_dar_de_baja_un_nodo_es_una_baja_logica PASSED                          [ 65%]
+tests/test_03_parcelas_nodos.py::test_nod04_solo_se_aceptan_estados_del_catalogo[mantenimiento_valido] PASSED      [ 68%]
+tests/test_03_parcelas_nodos.py::test_nod04_solo_se_aceptan_estados_del_catalogo[inactivo_valido] PASSED           [ 72%]
+tests/test_03_parcelas_nodos.py::test_nod04_solo_se_aceptan_estados_del_catalogo[averiado_invalido] PASSED         [ 75%]
+tests/test_03_parcelas_nodos.py::test_nod04_solo_se_aceptan_estados_del_catalogo[vacio_invalido] PASSED            [ 79%]
+tests/test_03_parcelas_nodos.py::test_nod05_solo_una_estacion_activa_se_autentica_con_api_key[sin_cabecera-401] PASSED [ 82%]
+tests/test_03_parcelas_nodos.py::test_nod05_solo_una_estacion_activa_se_autentica_con_api_key[clave_inexistente-401] PASSED [ 86%]
+tests/test_03_parcelas_nodos.py::test_nod05_solo_una_estacion_activa_se_autentica_con_api_key[clave_de_nodo_de_suelo-401] PASSED [ 89%]
+tests/test_03_parcelas_nodos.py::test_nod05_solo_una_estacion_activa_se_autentica_con_api_key[estacion_en_mantenimiento-401] PASSED [ 93%]
+tests/test_03_parcelas_nodos.py::test_nod05_solo_una_estacion_activa_se_autentica_con_api_key[estacion_activa-200] PASSED [ 96%]
+tests/test_03_parcelas_nodos.py::test_par06_editar_parcela_no_debe_permitir_nombre_vacio XFAIL (DEF-02: PUT /a...) [100%]
+
+================================================ short test summary info ================================================
+XFAIL tests/test_03_parcelas_nodos.py::test_par06_editar_parcela_no_debe_permitir_nombre_vacio - DEF-02: PUT /api/parcelas/<id> acepta un nombre vacío aunque el alta lo declara obligatorio
+============================================= 28 passed, 1 xfailed in 2.07s =============================================

@@ -1,0 +1,36 @@
+================================================== test session starts ==================================================
+platform win32 -- Python 3.9.1, pytest-8.4.2, pluggy-1.6.0 -- C:\Users\vitor\OneDrive\Documentos\GitHub\agroia-webapp\backend\venv\Scripts\python.exe
+metadata: {'Python': '3.9.1', 'Platform': 'Windows-10-10.0.26100-SP0', 'Packages': {'pytest': '8.4.2', 'pluggy': '1.6.0'}, 'Plugins': {'cov': '7.1.0', 'html': '4.2.0', 'metadata': '3.1.1'}}
+rootdir: C:\Users\vitor\OneDrive\Documentos\GitHub\agroia-webapp\backend
+configfile: pytest.ini
+plugins: cov-7.1.0, html-4.2.0, metadata-3.1.1
+collecting ... collected 24 items
+
+tests/test_04_comandos_riego.py::test_cmd01_agricultor_ordena_riego_en_su_nodo PASSED                              [  4%]
+tests/test_04_comandos_riego.py::test_cmd02_comando_incompleto_o_desconocido_se_rechaza[cuerpo_vacio] PASSED       [  8%]
+tests/test_04_comandos_riego.py::test_cmd02_comando_incompleto_o_desconocido_se_rechaza[sin_valor] PASSED          [ 12%]
+tests/test_04_comandos_riego.py::test_cmd02_comando_incompleto_o_desconocido_se_rechaza[sin_tipo] PASSED           [ 16%]
+tests/test_04_comandos_riego.py::test_cmd02_comando_incompleto_o_desconocido_se_rechaza[tipo_inexistente] PASSED   [ 20%]
+tests/test_04_comandos_riego.py::test_cmd03_el_valor_cero_es_una_orden_valida[cero] PASSED                         [ 25%]
+tests/test_04_comandos_riego.py::test_cmd03_el_valor_cero_es_una_orden_valida[cero_texto] PASSED                   [ 29%]
+tests/test_04_comandos_riego.py::test_cmd03_el_valor_cero_es_una_orden_valida[falso] PASSED                        [ 33%]
+tests/test_04_comandos_riego.py::test_cmd04_quien_puede_ordenar_y_sobre_que_nodos[nodo_inactivo-409] PASSED        [ 37%]
+tests/test_04_comandos_riego.py::test_cmd04_quien_puede_ordenar_y_sobre_que_nodos[nodo_en_mantenimiento-409] PASSED [ 41%]
+tests/test_04_comandos_riego.py::test_cmd04_quien_puede_ordenar_y_sobre_que_nodos[nodo_de_otro_agricultor-403] PASSED [ 45%]
+tests/test_04_comandos_riego.py::test_cmd04_quien_puede_ordenar_y_sobre_que_nodos[destino_es_una_estacion-404] PASSED [ 50%]
+tests/test_04_comandos_riego.py::test_cmd04_quien_puede_ordenar_y_sobre_que_nodos[nodo_inexistente-404] PASSED     [ 54%]
+tests/test_04_comandos_riego.py::test_cmd04_quien_puede_ordenar_y_sobre_que_nodos[admin_controla_cualquier_nodo-201] PASSED [ 58%]
+tests/test_04_comandos_riego.py::test_cmd05_la_estacion_recibe_y_confirma_el_comando PASSED                        [ 62%]
+tests/test_04_comandos_riego.py::test_cmd06_un_comando_pendiente_expira_a_los_10_minutos[9_min_59_s] PASSED        [ 66%]
+tests/test_04_comandos_riego.py::test_cmd06_un_comando_pendiente_expira_a_los_10_minutos[10_min_exactos] PASSED    [ 70%]
+tests/test_04_comandos_riego.py::test_cmd06_un_comando_pendiente_expira_a_los_10_minutos[10_min_y_1_s] PASSED      [ 75%]
+tests/test_04_comandos_riego.py::test_cmd07_un_comando_ejecutado_se_conserva_7_dias[7_dias_exactos] PASSED         [ 79%]
+tests/test_04_comandos_riego.py::test_cmd07_un_comando_ejecutado_se_conserva_7_dias[7_dias_y_1_s] PASSED           [ 83%]
+tests/test_04_comandos_riego.py::test_cmd08_una_estacion_no_opera_nodos_de_otra_parcela PASSED                     [ 87%]
+tests/test_04_comandos_riego.py::test_cmd09_confirmacion_por_lote_ignora_comandos_ajenos PASSED                    [ 91%]
+tests/test_04_comandos_riego.py::test_cmd10_confirmaciones_mal_formadas_se_rechazan PASSED                         [ 95%]
+tests/test_04_comandos_riego.py::test_cmd11_lote_con_ids_no_numericos_no_debe_fallar_con_500 XFAIL (DEF-03: la...) [100%]
+
+================================================ short test summary info ================================================
+XFAIL tests/test_04_comandos_riego.py::test_cmd11_lote_con_ids_no_numericos_no_debe_fallar_con_500 - DEF-03: la confirmación por lote responde 500 si comando_ids contiene un elemento que no es un número entero
+============================================= 23 passed, 1 xfailed in 2.43s =============================================

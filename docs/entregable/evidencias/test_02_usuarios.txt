@@ -1,0 +1,35 @@
+================================================== test session starts ==================================================
+platform win32 -- Python 3.9.1, pytest-8.4.2, pluggy-1.6.0 -- C:\Users\vitor\OneDrive\Documentos\GitHub\agroia-webapp\backend\venv\Scripts\python.exe
+metadata: {'Python': '3.9.1', 'Platform': 'Windows-10-10.0.26100-SP0', 'Packages': {'pytest': '8.4.2', 'pluggy': '1.6.0'}, 'Plugins': {'cov': '7.1.0', 'html': '4.2.0', 'metadata': '3.1.1'}}
+rootdir: C:\Users\vitor\OneDrive\Documentos\GitHub\agroia-webapp\backend
+configfile: pytest.ini
+plugins: cov-7.1.0, html-4.2.0, metadata-3.1.1
+collecting ... collected 25 items
+
+tests/test_02_usuarios.py::test_usu01_admin_registra_un_agricultor PASSED                                          [  4%]
+tests/test_02_usuarios.py::test_usu02_admin_lista_usuarios_sin_exponer_passwords PASSED                            [  8%]
+tests/test_02_usuarios.py::test_usu03_solo_un_admin_gestiona_usuarios PASSED                                       [ 12%]
+tests/test_02_usuarios.py::test_usu04_longitud_del_nombre[1_rechazado] PASSED                                      [ 16%]
+tests/test_02_usuarios.py::test_usu04_longitud_del_nombre[2_minimo] PASSED                                         [ 20%]
+tests/test_02_usuarios.py::test_usu04_longitud_del_nombre[100_maximo] PASSED                                       [ 24%]
+tests/test_02_usuarios.py::test_usu04_longitud_del_nombre[101_rechazado] PASSED                                    [ 28%]
+tests/test_02_usuarios.py::test_usu05_longitud_de_la_password_inicial[7_rechazada] PASSED                          [ 32%]
+tests/test_02_usuarios.py::test_usu05_longitud_de_la_password_inicial[8_minimo] PASSED                             [ 36%]
+tests/test_02_usuarios.py::test_usu05_longitud_de_la_password_inicial[128_maximo] PASSED                           [ 40%]
+tests/test_02_usuarios.py::test_usu05_longitud_de_la_password_inicial[129_rechazada] PASSED                        [ 44%]
+tests/test_02_usuarios.py::test_usu06_alta_con_datos_invalidos_se_rechaza[correo_sin_arroba] PASSED                [ 48%]
+tests/test_02_usuarios.py::test_usu06_alta_con_datos_invalidos_se_rechaza[correo_con_espacio] PASSED               [ 52%]
+tests/test_02_usuarios.py::test_usu06_alta_con_datos_invalidos_se_rechaza[correo_vacio] PASSED                     [ 56%]
+tests/test_02_usuarios.py::test_usu06_alta_con_datos_invalidos_se_rechaza[rol_inexistente] PASSED                  [ 60%]
+tests/test_02_usuarios.py::test_usu06_alta_con_datos_invalidos_se_rechaza[password_no_es_texto] PASSED             [ 64%]
+tests/test_02_usuarios.py::test_usu06_alta_con_datos_invalidos_se_rechaza[correo_duplicado] PASSED                 [ 68%]
+tests/test_02_usuarios.py::test_usu07_admin_no_puede_bloquearse_a_si_mismo[desactivarse] PASSED                    [ 72%]
+tests/test_02_usuarios.py::test_usu07_admin_no_puede_bloquearse_a_si_mismo[quitarse_el_rol] PASSED                 [ 76%]
+tests/test_02_usuarios.py::test_usu08_desactivar_cuenta_cierra_su_sesion_abierta PASSED                            [ 80%]
+tests/test_02_usuarios.py::test_usu09_agricultor_debe_confirmar_su_correo PASSED                                   [ 84%]
+tests/test_02_usuarios.py::test_usu10_enlace_de_confirmacion_alterado_no_confirma PASSED                           [ 88%]
+tests/test_02_usuarios.py::test_usu11_si_falla_el_correo_no_se_crea_la_cuenta PASSED                               [ 92%]
+tests/test_02_usuarios.py::test_usu12_un_admin_nuevo_no_requiere_confirmar_correo PASSED                           [ 96%]
+tests/test_02_usuarios.py::test_usu13_modelo_usuario_guarda_la_password_como_hash PASSED                           [100%]
+
+================================================== 25 passed in 2.69s ===================================================

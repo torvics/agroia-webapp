@@ -1,0 +1,34 @@
+================================================== test session starts ==================================================
+platform win32 -- Python 3.9.1, pytest-8.4.2, pluggy-1.6.0 -- C:\Users\vitor\OneDrive\Documentos\GitHub\agroia-webapp\backend\venv\Scripts\python.exe
+metadata: {'Python': '3.9.1', 'Platform': 'Windows-10-10.0.26100-SP0', 'Packages': {'pytest': '8.4.2', 'pluggy': '1.6.0'}, 'Plugins': {'cov': '7.1.0', 'html': '4.2.0', 'metadata': '3.1.1'}}
+rootdir: C:\Users\vitor\OneDrive\Documentos\GitHub\agroia-webapp\backend
+configfile: pytest.ini
+plugins: cov-7.1.0, html-4.2.0, metadata-3.1.1
+collecting ... collected 22 items
+
+tests/test_01_autenticacion.py::test_aut01_login_con_credenciales_validas_devuelve_token PASSED                    [  4%]
+tests/test_01_autenticacion.py::test_aut02_login_con_credenciales_invalidas_se_rechaza[password_incorrecta] PASSED [  9%]
+tests/test_01_autenticacion.py::test_aut02_login_con_credenciales_invalidas_se_rechaza[correo_inexistente] PASSED  [ 13%]
+tests/test_01_autenticacion.py::test_aut02_login_con_credenciales_invalidas_se_rechaza[correo_vacio] PASSED        [ 18%]
+tests/test_01_autenticacion.py::test_aut03_cuenta_inactiva_o_sin_confirmar_no_inicia_sesion[cuenta_desactivada] PASSED [ 22%]
+tests/test_01_autenticacion.py::test_aut03_cuenta_inactiva_o_sin_confirmar_no_inicia_sesion[correo_sin_confirmar] PASSED [ 27%]
+tests/test_01_autenticacion.py::test_aut04_logout_revoca_el_token PASSED                                           [ 31%]
+tests/test_01_autenticacion.py::test_aut05_longitud_de_la_nueva_password[11_rechazada] PASSED                      [ 36%]
+tests/test_01_autenticacion.py::test_aut05_longitud_de_la_nueva_password[12_minimo] PASSED                         [ 40%]
+tests/test_01_autenticacion.py::test_aut05_longitud_de_la_nueva_password[128_maximo] PASSED                        [ 45%]
+tests/test_01_autenticacion.py::test_aut05_longitud_de_la_nueva_password[129_rechazada] PASSED                     [ 50%]
+tests/test_01_autenticacion.py::test_aut06_cambiar_password_exige_la_actual_y_cierra_la_sesion PASSED              [ 54%]
+tests/test_01_autenticacion.py::test_aut07_recuperacion_de_password_de_un_solo_uso PASSED                          [ 59%]
+tests/test_01_autenticacion.py::test_aut08_token_de_recuperacion_invalido_se_rechaza[firma_alterada] PASSED        [ 63%]
+tests/test_01_autenticacion.py::test_aut08_token_de_recuperacion_invalido_se_rechaza[token_demasiado_corto] PASSED [ 68%]
+tests/test_01_autenticacion.py::test_aut08_token_de_recuperacion_invalido_se_rechaza[sin_token] PASSED             [ 72%]
+tests/test_01_autenticacion.py::test_aut08_token_de_recuperacion_invalido_se_rechaza[token_demasiado_largo] PASSED [ 77%]
+tests/test_01_autenticacion.py::test_aut09_token_de_recuperacion_caduca_a_los_20_minutos[recien_creado] PASSED     [ 81%]
+tests/test_01_autenticacion.py::test_aut09_token_de_recuperacion_caduca_a_los_20_minutos[20_min_exactos] PASSED    [ 86%]
+tests/test_01_autenticacion.py::test_aut09_token_de_recuperacion_caduca_a_los_20_minutos[20_min_y_1_s] PASSED      [ 90%]
+tests/test_01_autenticacion.py::test_aut10_recuperacion_no_revela_cuentas_y_limita_solicitudes PASSED              [ 95%]
+tests/test_01_autenticacion.py::test_aut11_login_sin_password_no_debe_fallar_con_500 XFAIL (DEF-01: login sin ...) [100%]
+
+================================================ short test summary info ================================================
+XFAIL tests/test_01_autenticacion.py::test_aut11_login_sin_password_no_debe_fallar_con_500 - DEF-01: login sin contraseña provoca un error 500 (auth_routes.login pasa None a check_password)
+============================================= 21 passed, 1 xfailed in 4.14s =============================================

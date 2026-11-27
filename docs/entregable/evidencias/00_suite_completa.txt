@@ -1,0 +1,48 @@
+.....................x.....................................................x.......................x.............. [ 55%]
+...........................................................................................                        [100%]
+--- generated xml file: C:\Users\vitor\OneDrive\Documentos\GitHub\agroia-webapp\docs\entregable\evidencias\junit.xml ----
+==================================================== tests coverage =====================================================
+____________________________________ coverage: platform win32, python 3.9.1-final-0 _____________________________________
+
+Name                                      Stmts   Miss  Cover
+-------------------------------------------------------------
+app\__init__.py                              54      0   100%
+app\config.py                                15      0   100%
+app\extensions.py                             6      0   100%
+app\models\__init__.py                        8      0   100%
+app\models\alerta_config.py                  16      0   100%
+app\models\alerta_enviada.py                 21      1    95%
+app\models\bitacora.py                        9      0   100%
+app\models\comando.py                        12      0   100%
+app\models\nodo.py                           11      0   100%
+app\models\parcela.py                         8      0   100%
+app\models\token_revocado.py                 10      0   100%
+app\models\usuario.py                        17      0   100%
+app\routes\__init__.py                        0      0   100%
+app\routes\alertas_routes.py                111      8    93%
+app\routes\auth_routes.py                   225     76    66%
+app\routes\bitacora_routes.py                80     69    14%
+app\routes\comandos_routes.py               113      4    96%
+app\routes\nodos_routes.py                   95     14    85%
+app\routes\parcelas_routes.py                63      4    94%
+app\routes\reportes_routes.py                61      2    97%
+app\routes\sensores_routes.py               443    397    10%
+app\routes\usuarios_routes.py               104     13    88%
+app\services\alertas_service.py              46      6    87%
+app\services\correo_service.py              142    129     9%
+app\services\reportes_export_service.py     120      7    94%
+app\services\reportes_service.py             76     33    57%
+app\utils\__init__.py                         0      0   100%
+app\utils\auth_nodo.py                       17      0   100%
+app\utils\decoradores.py                     14      1    93%
+app\utils\email_confirmation.py              11      0   100%
+app\utils\password_reset.py                  37      3    92%
+-------------------------------------------------------------
+TOTAL                                      1945    767    61%
+Coverage JSON written to file ../docs/entregable/evidencias/cobertura.json
+- Generated html report: file:///C:/Users/vitor/OneDrive/Documentos/GitHub/agroia-webapp/backend/../docs/entregable/evidencias/reporte_pytest.html -
+================================================ short test summary info ================================================
+XFAIL tests/test_01_autenticacion.py::test_aut11_login_sin_password_no_debe_fallar_con_500 - DEF-01: login sin contraseña provoca un error 500 (auth_routes.login pasa None a check_password)
+XFAIL tests/test_03_parcelas_nodos.py::test_par06_editar_parcela_no_debe_permitir_nombre_vacio - DEF-02: PUT /api/parcelas/<id> acepta un nombre vacío aunque el alta lo declara obligatorio
+XFAIL tests/test_04_comandos_riego.py::test_cmd11_lote_con_ids_no_numericos_no_debe_fallar_con_500 - DEF-03: la confirmación por lote responde 500 si comando_ids contiene un elemento que no es un número entero
+202 passed, 3 xfailed in 19.42s

@@ -16,6 +16,7 @@ from app import create_app
 from app.config import Config
 from app.extensions import db
 from app.models import AlertaEnviada, Nodo, Parcela, Usuario
+from app.utils.password_reset import version_credencial
 
 
 class IntegracionTest(unittest.TestCase):
@@ -53,7 +54,12 @@ class IntegracionTest(unittest.TestCase):
             self.tokens = {
                 usuario_id: create_access_token(
                     identity=str(usuario_id),
-                    additional_claims={"rol": rol},
+                    additional_claims={
+                        "rol": rol,
+                        "credencial_ver": version_credencial(
+                            db.session.get(Usuario, usuario_id)
+                        ),
+                    },
                 )
                 for usuario_id, rol in ((1, "admin"), (2, "admin"),
                                         (3, "agricultor"), (4, "agricultor"))

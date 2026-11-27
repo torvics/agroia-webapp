@@ -1,0 +1,11 @@
+Copia aquí tus capturas de pantalla (PNG o JPG) de la ejecución de las pruebas.
+
+Al volver a generar el PDF se agregan en la sección "5.6 Capturas de pantalla",
+en orden alfabético. El nombre del archivo se usa como pie de imagen:
+
+    01-suite-completa-en-vs-code.png   ->  "Suite completa en vs code"
+    02-modulo-alertas.png              ->  "Modulo alertas"
+
+Para regenerar el PDF, desde la raíz del repositorio:
+
+    backend\venv\Scripts\python.exe docs\entregable\generar_entregable.py

@@ -1,0 +1,87 @@
+[
+ {
+  "clave": "M1",
+  "modulo": "Autenticación",
+  "archivo": "app/routes/auth_routes.py",
+  "descripcion": "Aceptar contraseñas de 11 caracteres (mínimo 12 → 11)",
+  "pruebas": "tests/test_01_autenticacion.py",
+  "detectada": true,
+  "fallidas": [
+   "FAILED tests/test_01_autenticacion.py::test_aut05_longitud_de_la_nueva_password[11_rechazada]"
+  ],
+  "resumen": "1 failed, 20 passed, 1 xfailed in 4.69s",
+  "comando": "python -m pytest tests/test_01_autenticacion.py -q --tb=short -rf",
+  "salida": "\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[31mF\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[33mx\u001b[0m\u001b[31m                                                                                             [100%]\u001b[0m\n======================================================= FAILURES ========================================================\n\u001b[31m\u001b[1m________________________________ test_aut05_longitud_de_la_nueva_password[11_rechazada] _________________________________\u001b[0m\n\u001b[1m\u001b[31mtests\\test_01_autenticacion.py\u001b[0m:143: in test_aut05_longitud_de_la_nueva_password\n    \u001b[0m\u001b[94massert\u001b[39;49;00m respuesta.status_code == estado_esperado\u001b[90m\u001b[39;49;00m\n\u001b[1m\u001b[31mE   assert 200 == 400\u001b[0m\n\u001b[1m\u001b[31mE    +  where 200 = <WrapperTestResponse streamed [200 OK]>.status_code\u001b[0m\n\u001b[36m\u001b[1m================================================ short test summary info ================================================\u001b[0m\n\u001b[31mFAILED\u001b[0m tests/test_01_autenticacion.py::\u001b[1mtest_aut05_longitud_de_la_nueva_password[11_rechazada]\u001b[0m - assert 200 == 400\n\u001b[31m\u001b[31m\u001b[1m1 failed\u001b[0m, \u001b[32m20 passed\u001b[0m, \u001b[33m1 xfailed\u001b[0m\u001b[31m in 4.69s\u001b[0m\u001b[0m\n"
+ },
+ {
+  "clave": "M2",
+  "modulo": "Usuarios",
+  "archivo": "app/routes/usuarios_routes.py",
+  "descripcion": "Permitir que un administrador se desactive a sí mismo",
+  "pruebas": "tests/test_02_usuarios.py",
+  "detectada": true,
+  "fallidas": [
+   "FAILED tests/test_02_usuarios.py::test_usu07_admin_no_puede_bloquearse_a_si_mismo[desactivarse]",
+   "FAILED tests/test_02_usuarios.py::test_usu07_admin_no_puede_bloquearse_a_si_mismo[quitarse_el_rol]"
+  ],
+  "resumen": "2 failed, 23 passed in 3.39s",
+  "comando": "python -m pytest tests/test_02_usuarios.py -q --tb=short -rf",
+  "salida": "\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[31mF\u001b[0m\u001b[31mF\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[31m                                                                                          [100%]\u001b[0m\n======================================================= FAILURES ========================================================\n\u001b[31m\u001b[1m_____________________________ test_usu07_admin_no_puede_bloquearse_a_si_mismo[desactivarse] _____________________________\u001b[0m\n\u001b[1m\u001b[31mtests\\test_02_usuarios.py\u001b[0m:182: in test_usu07_admin_no_puede_bloquearse_a_si_mismo\n    \u001b[0m\u001b[94massert\u001b[39;49;00m respuesta.status_code == \u001b[94m400\u001b[39;49;00m\u001b[90m\u001b[39;49;00m\n\u001b[1m\u001b[31mE   assert 200 == 400\u001b[0m\n\u001b[1m\u001b[31mE    +  where 200 = <WrapperTestResponse streamed [200 OK]>.status_code\u001b[0m\n\u001b[31m\u001b[1m___________________________ test_usu07_admin_no_puede_bloquearse_a_si_mismo[quitarse_el_rol] ____________________________\u001b[0m\n\u001b[1m\u001b[31mtests\\test_02_usuarios.py\u001b[0m:182: in test_usu07_admin_no_puede_bloquearse_a_si_mismo\n    \u001b[0m\u001b[94massert\u001b[39;49;00m respuesta.status_code == \u001b[94m400\u001b[39;49;00m\u001b[90m\u001b[39;49;00m\n\u001b[1m\u001b[31mE   assert 200 == 400\u001b[0m\n\u001b[1m\u001b[31mE    +  where 200 = <WrapperTestResponse streamed [200 OK]>.status_code\u001b[0m\n\u001b[36m\u001b[1m================================================ short test summary info ================================================\u001b[0m\n\u001b[31mFAILED\u001b[0m tests/test_02_usuarios.py::\u001b[1mtest_usu07_admin_no_puede_bloquearse_a_si_mismo[desactivarse]\u001b[0m - assert 200 == 400\n\u001b[31mFAILED\u001b[0m tests/test_02_usuarios.py::\u001b[1mtest_usu07_admin_no_puede_bloquearse_a_si_mismo[quitarse_el_rol]\u001b[0m - assert 200 == 400\n\u001b[31m\u001b[31m\u001b[1m2 failed\u001b[0m, \u001b[32m23 passed\u001b[0m\u001b[31m in 3.39s\u001b[0m\u001b[0m\n"
+ },
+ {
+  "clave": "M3",
+  "modulo": "Parcelas y nodos",
+  "archivo": "app/routes/parcelas_routes.py",
+  "descripcion": "Mostrar a cada agricultor las parcelas de todos",
+  "pruebas": "tests/test_03_parcelas_nodos.py",
+  "detectada": true,
+  "fallidas": [
+   "FAILED tests/test_03_parcelas_nodos.py::test_par03_cada_agricultor_ve_solo_sus_parcelas"
+  ],
+  "resumen": "1 failed, 27 passed, 1 xfailed in 2.03s",
+  "comando": "python -m pytest tests/test_03_parcelas_nodos.py -q --tb=short -rf",
+  "salida": "\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[31mF\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[33mx\u001b[0m\u001b[31m                                                                                      [100%]\u001b[0m\n======================================================= FAILURES ========================================================\n\u001b[31m\u001b[1m____________________________________ test_par03_cada_agricultor_ve_solo_sus_parcelas ____________________________________\u001b[0m\n\u001b[1m\u001b[31mtests\\test_03_parcelas_nodos.py\u001b[0m:75: in test_par03_cada_agricultor_ve_solo_sus_parcelas\n    \u001b[0m\u001b[94massert\u001b[39;49;00m ids_visibles(AGRICULTOR) == [de_ana]\u001b[90m\u001b[39;49;00m\n\u001b[1m\u001b[31mE   assert [1, 2] == [1]\u001b[0m\n\u001b[1m\u001b[31mE     \u001b[0m\n\u001b[1m\u001b[31mE     Left contains one more item: \u001b[0m\u001b[94m2\u001b[39;49;00m\u001b[90m\u001b[39;49;00m\u001b[0m\n\u001b[1m\u001b[31mE     Use -v to get more diff\u001b[0m\n\u001b[36m\u001b[1m================================================ short test summary info ================================================\u001b[0m\n\u001b[31mFAILED\u001b[0m tests/test_03_parcelas_nodos.py::\u001b[1mtest_par03_cada_agricultor_ve_solo_sus_parcelas\u001b[0m - assert [1, 2] == [1]\n\u001b[31m\u001b[31m\u001b[1m1 failed\u001b[0m, \u001b[32m27 passed\u001b[0m, \u001b[33m1 xfailed\u001b[0m\u001b[31m in 2.03s\u001b[0m\u001b[0m\n"
+ },
+ {
+  "clave": "M4",
+  "modulo": "Comandos de riego",
+  "archivo": "app/routes/comandos_routes.py",
+  "descripcion": "Expirar el comando justo a los 10 minutos (< → <=)",
+  "pruebas": "tests/test_04_comandos_riego.py",
+  "detectada": true,
+  "fallidas": [
+   "FAILED tests/test_04_comandos_riego.py::test_cmd06_un_comando_pendiente_expira_a_los_10_minutos[10_min_exactos]"
+  ],
+  "resumen": "1 failed, 22 passed, 1 xfailed in 2.03s",
+  "comando": "python -m pytest tests/test_04_comandos_riego.py -q --tb=short -rf",
+  "salida": "\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[31mF\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[33mx\u001b[0m\u001b[31m                                                                                           [100%]\u001b[0m\n======================================================= FAILURES ========================================================\n\u001b[31m\u001b[1m________________________ test_cmd06_un_comando_pendiente_expira_a_los_10_minutos[10_min_exactos] ________________________\u001b[0m\n\u001b[1m\u001b[31mtests\\test_04_comandos_riego.py\u001b[0m:238: in test_cmd06_un_comando_pendiente_expira_a_los_10_minutos\n    \u001b[0m\u001b[94massert\u001b[39;49;00m existe \u001b[95mis\u001b[39;49;00m se_conserva\u001b[90m\u001b[39;49;00m\n\u001b[1m\u001b[31mE   assert False is True\u001b[0m\n\u001b[36m\u001b[1m================================================ short test summary info ================================================\u001b[0m\n\u001b[31mFAILED\u001b[0m tests/test_04_comandos_riego.py::\u001b[1mtest_cmd06_un_comando_pendiente_expira_a_los_10_minutos[10_min_exactos]\u001b[0m - assert False is True\n\u001b[31m\u001b[31m\u001b[1m1 failed\u001b[0m, \u001b[32m22 passed\u001b[0m, \u001b[33m1 xfailed\u001b[0m\u001b[31m in 2.03s\u001b[0m\u001b[0m\n"
+ },
+ {
+  "clave": "M5",
+  "modulo": "Alertas",
+  "archivo": "app/services/alertas_service.py",
+  "descripcion": "Tratar como crítica una lectura igual al umbral (>= → >)",
+  "pruebas": "tests/test_05_alertas.py",
+  "detectada": true,
+  "fallidas": [
+   "FAILED tests/test_05_alertas.py::test_ale07_solo_una_lectura_bajo_el_umbral_genera_alerta[30.0_igual_al_umbral]"
+  ],
+  "resumen": "1 failed, 49 passed in 2.66s",
+  "comando": "python -m pytest tests/test_05_alertas.py -q --tb=short -rf",
+  "salida": "\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[31mF\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[31m                                                                 [100%]\u001b[0m\n======================================================= FAILURES ========================================================\n\u001b[31m\u001b[1m____________________ test_ale07_solo_una_lectura_bajo_el_umbral_genera_alerta[30.0_igual_al_umbral] _____________________\u001b[0m\n\u001b[1m\u001b[31mtests\\test_05_alertas.py\u001b[0m:220: in test_ale07_solo_una_lectura_bajo_el_umbral_genera_alerta\n    \u001b[0m\u001b[94massert\u001b[39;49;00m (alerta_id \u001b[95mis\u001b[39;49;00m \u001b[95mnot\u001b[39;49;00m \u001b[94mNone\u001b[39;49;00m) \u001b[95mis\u001b[39;49;00m genera_alerta\u001b[90m\u001b[39;49;00m\n\u001b[1m\u001b[31mE   assert (1 is not None) is False\u001b[0m\n\u001b[36m\u001b[1m================================================ short test summary info ================================================\u001b[0m\n\u001b[31mFAILED\u001b[0m tests/test_05_alertas.py::\u001b[1mtest_ale07_solo_una_lectura_bajo_el_umbral_genera_alerta[30.0_igual_al_umbral]\u001b[0m - assert (1 is not None) is False\n\u001b[31m\u001b[31m\u001b[1m1 failed\u001b[0m, \u001b[32m49 passed\u001b[0m\u001b[31m in 2.66s\u001b[0m\u001b[0m\n"
+ },
+ {
+  "clave": "M6",
+  "modulo": "Reportes",
+  "archivo": "app/routes/reportes_routes.py",
+  "descripcion": "Rechazar un rango de exactamente 366 días (> → >=)",
+  "pruebas": "tests/test_06_reportes.py",
+  "detectada": true,
+  "fallidas": [
+   "FAILED tests/test_06_reportes.py::test_rep05_limites_del_rango_de_fechas[366_dias_exactos]"
+  ],
+  "resumen": "1 failed, 40 passed in 1.91s",
+  "comando": "python -m pytest tests/test_06_reportes.py -q --tb=short -rf",
+  "salida": "\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[31mF\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[32m.\u001b[0m\u001b[31m                                                                          [100%]\u001b[0m\n======================================================= FAILURES ========================================================\n\u001b[31m\u001b[1m_______________________________ test_rep05_limites_del_rango_de_fechas[366_dias_exactos] ________________________________\u001b[0m\n\u001b[1m\u001b[31mtests\\test_06_reportes.py\u001b[0m:213: in test_rep05_limites_del_rango_de_fechas\n    \u001b[0m\u001b[94massert\u001b[39;49;00m respuesta.status_code == estado_esperado\u001b[90m\u001b[39;49;00m\n\u001b[1m\u001b[31mE   assert 400 == 200\u001b[0m\n\u001b[1m\u001b[31mE    +  where 400 = <WrapperTestResponse streamed [400 BAD REQUEST]>.status_code\u001b[0m\n\u001b[36m\u001b[1m================================================ short test summary info ================================================\u001b[0m\n\u001b[31mFAILED\u001b[0m tests/test_06_reportes.py::\u001b[1mtest_rep05_limites_del_rango_de_fechas[366_dias_exactos]\u001b[0m - assert 400 == 200\n\u001b[31m\u001b[31m\u001b[1m1 failed\u001b[0m, \u001b[32m40 passed\u001b[0m\u001b[31m in 1.91s\u001b[0m\u001b[0m\n"
+ }
+]

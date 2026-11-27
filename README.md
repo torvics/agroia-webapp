@@ -64,6 +64,27 @@ cp .env.example .env        # pon aquí la api_key real de un nodo registrado
 python generador_datos.py   # en otra terminal: python cliente_comandos.py
 ```
 
+## Pruebas unitarias (PyTest)
+
+Las pruebas del backend usan SQLite en memoria y dobles de prueba, por lo que no
+necesitan MySQL, InfluxDB, SMTP ni Docker.
+
+```bash
+cd backend
+python -m venv venv
+venv\Scripts\activate            # Linux/macOS: source venv/bin/activate
+pip install -r requirements-dev.txt
+
+python -m pytest -v                              # todas las pruebas
+python -m pytest tests/test_05_alertas.py -v     # un solo módulo
+python -m pytest -m caso_limite -v               # solo los casos límite
+python -m pytest --cov=app                       # con cobertura
+```
+
+Módulos probados: autenticación, usuarios, parcelas y nodos, comandos de riego,
+alertas y reportes (`backend/tests/test_01_*.py` a `test_06_*.py`). El documento
+del proyecto final y sus evidencias están en `docs/entregable/`.
+
 ## Primer usuario de prueba
 
 Como aún no hay pantalla de registro, crea el primer Admin manualmente desde una shell de Python dentro del contenedor/entorno del backend:

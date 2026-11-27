@@ -1,0 +1,51 @@
+================================================== test session starts ==================================================
+platform win32 -- Python 3.9.1, pytest-8.4.2, pluggy-1.6.0 -- C:\Users\vitor\OneDrive\Documentos\GitHub\agroia-webapp\backend\venv\Scripts\python.exe
+metadata: {'Python': '3.9.1', 'Platform': 'Windows-10-10.0.26100-SP0', 'Packages': {'pytest': '8.4.2', 'pluggy': '1.6.0'}, 'Plugins': {'cov': '7.1.0', 'html': '4.2.0', 'metadata': '3.1.1'}}
+rootdir: C:\Users\vitor\OneDrive\Documentos\GitHub\agroia-webapp\backend
+configfile: pytest.ini
+plugins: cov-7.1.0, html-4.2.0, metadata-3.1.1
+collecting ... collected 41 items
+
+tests/test_06_reportes.py::test_rep01_convertir_fecha_normaliza_a_utc[sufijo_Z] PASSED                             [  2%]
+tests/test_06_reportes.py::test_rep01_convertir_fecha_normaliza_a_utc[desfase_cero] PASSED                         [  4%]
+tests/test_06_reportes.py::test_rep01_convertir_fecha_normaliza_a_utc[hora_de_mexico] PASSED                       [  7%]
+tests/test_06_reportes.py::test_rep02_convertir_fecha_rechaza_fechas_invalidas[vacia] PASSED                       [  9%]
+tests/test_06_reportes.py::test_rep02_convertir_fecha_rechaza_fechas_invalidas[nula] PASSED                        [ 12%]
+tests/test_06_reportes.py::test_rep02_convertir_fecha_rechaza_fechas_invalidas[sin_hora_ni_zona] PASSED            [ 14%]
+tests/test_06_reportes.py::test_rep02_convertir_fecha_rechaza_fechas_invalidas[sin_zona] PASSED                    [ 17%]
+tests/test_06_reportes.py::test_rep02_convertir_fecha_rechaza_fechas_invalidas[texto_libre] PASSED                 [ 19%]
+tests/test_06_reportes.py::test_rep02_convertir_fecha_rechaza_fechas_invalidas[formato_local] PASSED               [ 21%]
+tests/test_06_reportes.py::test_rep03_reporte_json_resume_los_eventos_del_periodo PASSED                           [ 24%]
+tests/test_06_reportes.py::test_rep04_solicitud_de_reporte_invalida_se_rechaza[sin_fechas] PASSED                  [ 26%]
+tests/test_06_reportes.py::test_rep04_solicitud_de_reporte_invalida_se_rechaza[sin_fecha_fin] PASSED               [ 29%]
+tests/test_06_reportes.py::test_rep04_solicitud_de_reporte_invalida_se_rechaza[fechas_sin_zona_horaria] PASSED     [ 31%]
+tests/test_06_reportes.py::test_rep04_solicitud_de_reporte_invalida_se_rechaza[inicio_posterior_al_fin] PASSED     [ 34%]
+tests/test_06_reportes.py::test_rep04_solicitud_de_reporte_invalida_se_rechaza[formato_no_soportado] PASSED        [ 36%]
+tests/test_06_reportes.py::test_rep05_limites_del_rango_de_fechas[rango_de_0_s] PASSED                             [ 39%]
+tests/test_06_reportes.py::test_rep05_limites_del_rango_de_fechas[rango_de_1_s] PASSED                             [ 41%]
+tests/test_06_reportes.py::test_rep05_limites_del_rango_de_fechas[366_dias_exactos] PASSED                         [ 43%]
+tests/test_06_reportes.py::test_rep05_limites_del_rango_de_fechas[366_dias_y_1_s] PASSED                           [ 46%]
+tests/test_06_reportes.py::test_rep06_solo_el_propietario_o_un_admin_consulta_el_reporte[agricultor_ajeno] PASSED  [ 48%]
+tests/test_06_reportes.py::test_rep06_solo_el_propietario_o_un_admin_consulta_el_reporte[parcela_inexistente] PASSED [ 51%]
+tests/test_06_reportes.py::test_rep06_solo_el_propietario_o_un_admin_consulta_el_reporte[administrador] PASSED     [ 53%]
+tests/test_06_reportes.py::test_rep06_solo_el_propietario_o_un_admin_consulta_el_reporte[sin_sesion] PASSED        [ 56%]
+tests/test_06_reportes.py::test_rep07_el_periodo_incluye_el_inicio_y_excluye_el_fin PASSED                         [ 58%]
+tests/test_06_reportes.py::test_rep08_exportacion_del_reporte_a_csv_y_pdf[csv] PASSED                              [ 60%]
+tests/test_06_reportes.py::test_rep08_exportacion_del_reporte_a_csv_y_pdf[pdf] PASSED                              [ 63%]
+tests/test_06_reportes.py::test_rep09_el_csv_neutraliza_formulas_de_hoja_de_calculo[empieza_con_igual] PASSED      [ 65%]
+tests/test_06_reportes.py::test_rep09_el_csv_neutraliza_formulas_de_hoja_de_calculo[empieza_con_mas] PASSED        [ 68%]
+tests/test_06_reportes.py::test_rep09_el_csv_neutraliza_formulas_de_hoja_de_calculo[empieza_con_menos] PASSED      [ 70%]
+tests/test_06_reportes.py::test_rep09_el_csv_neutraliza_formulas_de_hoja_de_calculo[arroba_tras_espacios] PASSED   [ 73%]
+tests/test_06_reportes.py::test_rep09_el_csv_neutraliza_formulas_de_hoja_de_calculo[texto_normal] PASSED           [ 75%]
+tests/test_06_reportes.py::test_rep09_el_csv_neutraliza_formulas_de_hoja_de_calculo[numero_negativo] PASSED        [ 78%]
+tests/test_06_reportes.py::test_rep09_el_csv_neutraliza_formulas_de_hoja_de_calculo[cero] PASSED                   [ 80%]
+tests/test_06_reportes.py::test_rep09_el_csv_neutraliza_formulas_de_hoja_de_calculo[valor_nulo] PASSED             [ 82%]
+tests/test_06_reportes.py::test_rep09_el_csv_neutraliza_formulas_de_hoja_de_calculo[booleano] PASSED               [ 85%]
+tests/test_06_reportes.py::test_rep10_si_falla_la_base_de_sensores_se_responde_503 PASSED                          [ 87%]
+tests/test_06_reportes.py::test_rep11_el_servicio_valida_sus_argumentos[id_cero] PASSED                            [ 90%]
+tests/test_06_reportes.py::test_rep11_el_servicio_valida_sus_argumentos[id_como_texto] PASSED                      [ 92%]
+tests/test_06_reportes.py::test_rep11_el_servicio_valida_sus_argumentos[fecha_sin_zona] PASSED                     [ 95%]
+tests/test_06_reportes.py::test_rep11_el_servicio_valida_sus_argumentos[inicio_posterior_al_fin] PASSED            [ 97%]
+tests/test_06_reportes.py::test_rep11_el_servicio_valida_sus_argumentos[parcela_inexistente] PASSED                [100%]
+
+================================================== 41 passed in 1.69s ===================================================
